@@ -7,7 +7,7 @@ library(dplyr)
 config_file <- "config.rds"
 output_file <- file.path(Sys.getenv("RSTUDIO_CONNECT_APP_DATA_DIR", unset = "."), "reponses_strength.csv")
 
-# Liste des panélistes connus
+# Liste des panélistes connus (sera maintenant dynamique)
 panelistes_connus <- c("Alice Dupont", 
                        "Invite 1",
                        "Invite 2",
@@ -15,7 +15,7 @@ panelistes_connus <- c("Alice Dupont",
                        "Invite 4",
                        "Invite 5")
 
-# UI (identique)
+# UI avec styles étendus et améliorés
 ui <- fluidPage(
   useShinyjs(),
   tags$head(
@@ -47,13 +47,13 @@ ui <- fluidPage(
         margin-top: 20px;
       }
       .admin-modal .modal-dialog {
-        max-width: 90%;
-        width: 1200px;
+        max-width: 95%;
+        width: 1400px;
       }
       .admin-form {
-        max-height: 70vh;
-        overflow-y: auto;
-        padding: 20px;
+        max-height: 80vh;
+        overflow: hidden;
+        padding: 0;
       }
       .config-section {
         background: #f8f9fa;
@@ -107,6 +107,160 @@ ui <- fluidPage(
         border-bottom: 1px solid #dee2e6;
         padding-bottom: 10px;
       }
+      
+      /* STYLES AMÉLIORÉS POUR LES PANÉLISTES */
+      .panelist-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px;
+        margin-bottom: 8px;
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      }
+      .panelist-item:hover {
+        background: #f8f9fa;
+        border-color: #007bff;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      }
+      .panelist-name {
+        font-weight: 500;
+        color: #495057;
+        font-size: 14px;
+      }
+      .panelist-actions {
+        display: flex;
+        gap: 5px;
+      }
+      .add-panelist-section {
+        background: #e8f4fd;
+        border: 2px dashed #007bff;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 15px;
+        text-align: center;
+      }
+      
+      /* NAVIGATION PAR ONGLETS AMÉLIORÉE */
+      .nav-tabs {
+        border-bottom: 2px solid #dee2e6;
+        margin-bottom: 0;
+      }
+      .nav-tabs .nav-link {
+        border: 1px solid transparent;
+        border-radius: 8px 8px 0 0;
+        padding: 12px 20px;
+        font-weight: 500;
+        color: #6c757d;
+        transition: all 0.2s ease;
+      }
+      .nav-tabs .nav-link:hover {
+        border-color: #e9ecef #e9ecef #dee2e6;
+        background-color: #f8f9fa;
+        color: #495057;
+      }
+      .nav-tabs .nav-link.active {
+        background-color: #007bff !important;
+        color: white !important;
+        border-color: #007bff #007bff #007bff !important;
+      }
+      
+      /* CONTENU DES ONGLETS AVEC SCROLL SÉPARÉ - CORRECTION POUR FORCER L'AFFICHAGE */
+      .tab-content {
+        border: 1px solid #dee2e6;
+        border-top: none;
+        background: white;
+        border-radius: 0 0 8px 8px;
+        height: 70vh;
+        overflow: hidden;
+      }
+      .tab-pane {
+        height: 100%;
+        overflow-y: auto;
+        padding: 20px;
+        display: block !important; /* Override Bootstrap par défaut */
+        opacity: 1 !important;
+        visibility: visible !important;
+      }
+      
+      .tab-pane:not(.active) {
+        height: 0;
+        overflow: hidden;
+        opacity: 0;
+        visibility: hidden;
+        padding: 0;
+      }
+      
+      /* SCROLL PERSONNALISÉ */
+      .tab-pane::-webkit-scrollbar {
+        width: 8px;
+      }
+      .tab-pane::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+      .tab-pane::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+      }
+      .tab-pane::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+      }
+      
+      /* SECTION PANÉLISTES COMPACTE */
+      .panelists-container {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        padding: 10px;
+        background: #fafafa;
+      }
+      
+      /* RESPONSIVE */
+      @media (max-width: 768px) {
+        .admin-modal .modal-dialog {
+          width: 95%;
+          margin: 10px auto;
+        }
+        .tab-content {
+          height: 60vh;
+        }
+      }
+    ")),
+    
+    # JavaScript pour gérer les onglets et éviter la fermeture de modal
+    tags$script(HTML("
+      $(document).ready(function() {
+        // Gestion des onglets Bootstrap
+        $(document).on('click', '[data-toggle=\"tab\"]', function(e) {
+          e.preventDefault();
+          var target = $(this).attr('href');
+          
+          // Désactiver tous les onglets
+          $('.nav-link').removeClass('active');
+          $('.tab-pane').removeClass('show active');
+          
+          // Activer l'onglet cliqué
+          $(this).addClass('active');
+          $(target).addClass('show active');
+        });
+        
+        // Empêcher la fermeture de modal lors des confirmations
+        $(document).on('click', '.btn-danger[id^=\"confirm_delete\"]', function(e) {
+          e.stopPropagation();
+        });
+        
+        // Scroll automatique vers le haut lors du changement d'onglet
+        $(document).on('shown.bs.tab', 'a[data-toggle=\"tab\"]', function(e) {
+          var target = $(e.target).attr('href');
+          $(target).scrollTop(0);
+        });
+      });
     "))
   ),
   
@@ -159,6 +313,7 @@ server <- function(input, output, session) {
     page = 1,
     page1 = list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list()),
     page2 = list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list()),
+    panelistes = panelistes_connus,  # Liste dynamique des panélistes
     admin_logged = FALSE,
     show_admin = FALSE,
     initialized = FALSE,
@@ -227,12 +382,15 @@ server <- function(input, output, session) {
     })
   }
   
-  # Initialize configuration on startup - MODIFIÉ
+  # Initialize configuration on startup - MODIFIÉ pour inclure les panélistes
   observe({
     if (!global_config$initialized && file.exists(config_file)) {
       conf <- readRDS(config_file)
       global_config$page1 <- conf$page1 %||% list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list())
       global_config$page2 <- conf$page2 %||% list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list())
+      
+      # Charger les panélistes sauvegardés ou utiliser la liste par défaut
+      global_config$panelistes <- conf$panelistes %||% panelistes_connus
       
       # Initialize product IDs based on existing products
       max_products <- max(
@@ -364,7 +522,8 @@ server <- function(input, output, session) {
       # Sauvegarder la configuration complète
       saveRDS(list(
         page1 = global_config$page1,
-        page2 = global_config$page2
+        page2 = global_config$page2,
+        panelistes = global_config$panelistes
       ), file = config_file)
     })
     
@@ -380,6 +539,94 @@ server <- function(input, output, session) {
     delay(3000, {
       global_config$show_save_confirmation <- FALSE
     })
+  })
+  
+  # ========== GESTION DES PANÉLISTES ==========
+  
+  # Ajouter un panéliste
+  observeEvent(input$add_panelist_btn, {
+    new_name <- trimws(input$new_panelist_name)
+    if (new_name == "") {
+      showNotification("Veuillez saisir un nom de panéliste.", type = "warning")
+      return()
+    }
+    
+    if (new_name %in% global_config$panelistes) {
+      showNotification("Ce panéliste existe déjà.", type = "warning")
+      return()
+    }
+    
+    # Ajouter le panéliste
+    global_config$panelistes <- c(global_config$panelistes, new_name)
+    
+    # Sauvegarder immédiatement
+    saveRDS(list(
+      page1 = global_config$page1,
+      page2 = global_config$page2,
+      panelistes = global_config$panelistes
+    ), file = config_file)
+    
+    # Réinitialiser le champ
+    updateTextInput(session, "new_panelist_name", value = "")
+    
+    showNotification(paste("Panéliste", new_name, "ajouté avec succès !"), type = "message")
+  })
+  
+  # Supprimer un panéliste (observateur dynamique) - CORRIGÉ
+  observe({
+    lapply(global_config$panelistes, function(panelist) {
+      btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
+      observeEvent(input[[btn_id]], {
+        # Stocker le panéliste à supprimer
+        global_config$panelist_to_delete <- panelist
+        
+        # Modal de confirmation SANS fermer la modal principale
+        showModal(modalDialog(
+          title = tagList(icon("exclamation-triangle", style = "color: #dc3545;"), "Confirmer la suppression"),
+          div(
+            style = "text-align: center; padding: 20px;",
+            h5(paste("Êtes-vous sûr de vouloir supprimer le panéliste :")),
+            h4(style = "color: #dc3545; font-weight: bold;", panelist),
+            br(),
+            p("Cette action est irréversible.")
+          ),
+          footer = tagList(
+            actionButton("cancel_delete", "Annuler", class = "btn-secondary"),
+            actionButton("confirm_delete_panelist", "Supprimer", class = "btn-danger")
+          ),
+          size = "m",
+          easyClose = FALSE
+        ))
+      }, ignoreInit = TRUE)
+    })
+  })
+  
+  # Annuler la suppression
+  observeEvent(input$cancel_delete, {
+    global_config$panelist_to_delete <- NULL
+    removeModal()
+  })
+  
+  # Confirmer la suppression - CORRIGÉ
+  observeEvent(input$confirm_delete_panelist, {
+    panelist_to_remove <- global_config$panelist_to_delete
+    
+    if (!is.null(panelist_to_remove)) {
+      # Supprimer le panéliste
+      global_config$panelistes <- setdiff(global_config$panelistes, panelist_to_remove)
+      
+      # Sauvegarder
+      saveRDS(list(
+        page1 = global_config$page1,
+        page2 = global_config$page2,
+        panelistes = global_config$panelistes
+      ), file = config_file)
+      
+      showNotification(paste("Panéliste", panelist_to_remove, "supprimé avec succès."), type = "message")
+      global_config$panelist_to_delete <- NULL
+    }
+    
+    removeModal()
   })
   
   output$download_results <- downloadHandler(
@@ -422,20 +669,68 @@ server <- function(input, output, session) {
     }
   })
   
-  # Modal du panel admin
+  # Modal du panel admin avec onglets AMÉLIORÉE - CORRECTION MAJEURE
   observeEvent(input$show_admin_panel, {
     showModal(modalDialog(
       title = tagList(icon("cogs"), "Configuration de l'étude"),
       size = "l",
       class = "admin-modal",
       div(class = "admin-form",
-          uiOutput("admin_form_content")
+          # Navigation par onglets avec JavaScript
+          tags$ul(class = "nav nav-tabs", role = "tablist",
+                  tags$li(class = "nav-item",
+                          tags$a(class = "nav-link active", 
+                                 `data-toggle` = "tab", 
+                                 href = "#config-tab", 
+                                 role = "tab",
+                                 tagList(icon("cogs"), "Configuration"))),
+                  tags$li(class = "nav-item",
+                          tags$a(class = "nav-link", 
+                                 `data-toggle` = "tab", 
+                                 href = "#panelists-tab", 
+                                 role = "tab",
+                                 tagList(icon("users"), "Panélistes")))
+          ),
+          
+          # Contenu des onglets avec scroll séparé
+          div(class = "tab-content",
+              # Onglet Configuration
+              div(class = "tab-pane fade show active", 
+                  id = "config-tab", 
+                  role = "tabpanel",
+                  uiOutput("admin_config_content")
+              ),
+              
+              # Onglet Panélistes
+              div(class = "tab-pane fade", 
+                  id = "panelists-tab", 
+                  role = "tabpanel",
+                  uiOutput("admin_panelists_content")
+              )
+          )
       ),
       footer = tagList(
-        actionButton("close_admin", "Fermer", class = "btn-secondary"),
-        modalButton("Annuler")
+        actionButton("close_admin", "Fermer", class = "btn-secondary")
       )
     ))
+    
+    # FORCER L'ACTIVATION DE L'ONGLET CONFIGURATION
+    runjs("
+      setTimeout(function() {
+        // Activer le premier onglet et son contenu
+        $('#config-tab').addClass('show active');
+        $('a[href=\"#config-tab\"]').addClass('active');
+        
+        // S'assurer que l'onglet panélistes est inactif
+        $('#panelists-tab').removeClass('show active');
+        $('a[href=\"#panelists-tab\"]').removeClass('active');
+        
+        // Forcer le rendu initial
+        if (typeof Shiny !== 'undefined' && Shiny.bindAll) {
+          Shiny.bindAll(document.getElementById('config-tab'));
+        }
+      }, 150);
+    ")
   })
   
   observeEvent(input$close_admin, {
@@ -446,6 +741,66 @@ server <- function(input, output, session) {
     global_config$admin_logged
   })
   outputOptions(output, "adminLogged", suspendWhenHidden = FALSE)
+  
+  # ========== CONTENU DE L'ONGLET PANÉLISTES AMÉLIORÉ ==========
+  output$admin_panelists_content <- renderUI({
+    req(global_config$admin_logged)
+    
+    panelist_items <- lapply(global_config$panelistes, function(panelist) {
+      btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
+      
+      div(class = "panelist-item",
+          span(class = "panelist-name", panelist),
+          div(class = "panelist-actions",
+              actionButton(btn_id, "", 
+                           icon = icon("trash"), 
+                           class = "btn-danger btn-sm",
+                           title = "Supprimer ce panéliste",
+                           onclick = "event.stopPropagation();")
+          )
+      )
+    })
+    
+    tagList(
+      # Section d'ajout EN HAUT
+      div(class = "add-panelist-section",
+          h4(tagList(icon("user-plus"), "Ajouter un nouveau panéliste")),
+          fluidRow(
+            column(8,
+                   textInput("new_panelist_name", 
+                             label = NULL,
+                             placeholder = "Nom du nouveau panéliste",
+                             value = "")
+            ),
+            column(4,
+                   actionButton("add_panelist_btn", 
+                                "Ajouter", 
+                                icon = icon("plus"),
+                                class = "btn-success",
+                                style = "width: 100%;")
+            )
+          ),
+          div(class = "alert alert-info",
+              style = "margin-top: 15px;",
+              tagList(icon("lightbulb"), 
+                      " Les panélistes ajoutés seront immédiatement disponibles dans les questionnaires."))
+      ),
+      
+      # Liste des panélistes existants
+      div(class = "config-section",
+          h4(tagList(icon("users"), "Panélistes actuels (", length(global_config$panelistes), ")")),
+          
+          if (length(global_config$panelistes) > 0) {
+            div(class = "panelists-container",
+                panelist_items
+            )
+          } else {
+            div(class = "alert alert-info",
+                tagList(icon("info-circle"), " Aucun panéliste configuré."))
+          }
+      )
+    )
+  })
   
   # RENDERUI OPTIMISÉ avec gestion des cas vides
   output$dynamic_product_inputs <- renderUI({
@@ -543,7 +898,7 @@ server <- function(input, output, session) {
     )
   })
   
-  # Liaison avec products_changed() - VERSION CORRIGÉE
+  # Liaison avec products_changed()
   observeEvent(products_changed(), {
     # Forcer le re-rendu du dynamic_product_inputs
     output$dynamic_product_inputs <- renderUI({
@@ -685,9 +1040,12 @@ server <- function(input, output, session) {
     })
   })
   
-  # Reste du code identique...
-  output$admin_form_content <- renderUI({
+  # ========== CONTENU DE L'ONGLET CONFIGURATION ==========
+  output$admin_config_content <- renderUI({
     req(global_config$admin_logged)
+    
+    # Déclencheur réactif supplémentaire
+    input$show_admin_panel
     
     etapes_choices <- c("NEAT", "BLOOM", "WET", "DRY", "DRYER")
     
@@ -759,7 +1117,7 @@ server <- function(input, output, session) {
     })
   })
   
-  # Modified enregistrer_config function
+  # Fonction pour enregistrer la configuration
   enregistrer_config <- function(page_num) {
     req(input$admin_base, input$admin_etapes)
     
@@ -787,7 +1145,8 @@ server <- function(input, output, session) {
     
     saveRDS(list(
       page1 = global_config$page1,
-      page2 = global_config$page2
+      page2 = global_config$page2,
+      panelistes = global_config$panelistes
     ), file = config_file)
   }
   
@@ -843,7 +1202,7 @@ server <- function(input, output, session) {
       div(class = "config-section",
           selectInput(paste0("panelist_name_", cfg$page_id), 
                       tagList(icon("user"), "Votre nom :"), 
-                      choices = c("Veuillez sélectionner" = "", panelistes_connus), 
+                      choices = c("Veuillez sélectionner" = "", global_config$panelistes), 
                       selected = ""),   
           strong(paste("Base :", cfg$base))
       ),

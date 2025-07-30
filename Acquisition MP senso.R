@@ -224,6 +224,27 @@ ui <- fluidPage(
         background: #fafafa;
       }
       
+      /* STYLES POUR LES COMMENTAIRES */
+      .comment-box {
+        margin-top: 15px;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        border: 1px solid #dee2e6;
+      }
+      
+      .comment-box textarea {
+        width: 100%;
+        resize: vertical;
+        min-height: 80px;
+      }
+      
+      .step-section {
+        margin-bottom: 25px;
+        border-bottom: 1px dashed #ddd;
+        padding-bottom: 15px;
+      }
+      
       /* RESPONSIVE */
       @media (max-width: 768px) {
         .admin-modal .modal-dialog {
@@ -771,6 +792,7 @@ server <- function(input, output, session) {
   })
   
   # Annuler la suppression
+  # Annuler la suppression
   observeEvent(input$cancel_delete, {
     global_config$panelist_to_delete <- NULL
     removeModal()
@@ -1128,7 +1150,7 @@ server <- function(input, output, session) {
                      type = "message", duration = 3)
   })
   
-  # GESTION DES ÉTATS VIDES - Fonction pour générer l'interface des questionnaires
+  # GESTION DES ÉTATS VIDES - Fonction pour générer l'interface des questionnaires AVEC COMMENTAIRES
   render_questionnaire_ui <- function(cfg) {
     # Gestion des états vides
     if (length(cfg$produits) == 0) {
@@ -1145,11 +1167,13 @@ server <- function(input, output, session) {
       produit <- cfg$produits[i]
       code_produit <- if (length(cfg$codes_produits) >= i) cfg$codes_produits[i] else ""
       
-      sliders <- list()
+      etape_blocks <- list()
+      
       for (etape in cfg$etapes) {
         supports <- cfg$supports[[etape]]
         if (!is.null(supports) && length(supports) > 0) {
-          for (support in supports) {
+          # Sliders pour les supports
+          sliders <- lapply(supports, function(support) {
             input_id <- paste0("strength_", produit, "_", etape, "_", support)
             icone <- switch(etape,
                             "NEAT" = icon("flask"),
@@ -1158,18 +1182,37 @@ server <- function(input, output, session) {
                             "DRY" = icon("wind"),
                             "DRYER" = icon("wind"),
                             icon("dot-circle"))
-            sliders[[input_id]] <- sliderInput(
+            sliderInput(
               inputId = input_id,
               label = tagList(icone, paste(etape, "/", support)),
               min = 0, max = 4, value = 0, step = 0.1, ticks = FALSE
             )
-          }
+          })
+          
+          # Commentaire pour l'étape
+          comment_id <- paste0("comment_", i, "_", etape)
+          comment_input <- textAreaInput(
+            comment_id,
+            label = paste("Commentaire pour", etape),
+            rows = 2,
+            placeholder = "Saisissez votre observation ici..."
+          )
+          
+          etape_blocks[[etape]] <- tagList(
+            div(class = "step-section",
+                sliders,
+                div(class = "comment-box",
+                    comment_input
+                )
+            )
+          )
         }
       }
+      
       wellPanel(
         h4(tagList(icon("box"), paste("Produit :", produit))),
         if (code_produit != "") p(strong("Code :", code_produit)),
-        sliders
+        etape_blocks
       )
     })
     
@@ -1182,7 +1225,7 @@ server <- function(input, output, session) {
           strong(paste("Base :", cfg$base))
       ),
       div(style = "background-color: #e3f2fd; padding: 15px; border-left: 4px solid #2196f3; margin-bottom: 20px; border-radius: 4px;",
-          tagList(icon("info-circle"), " Merci d'évaluer la force pour chaque combinaison produit / support / étape.")),
+          tagList(icon("info-circle"), " Merci d'évaluer la force pour chaque combinaison produit / support / étape et d'ajouter vos commentaires.")),
       produit_panels,
       div(style = "text-align: center; margin-top: 30px;",
           actionButton(paste0("submit_", cfg$page_id), 
@@ -1224,7 +1267,7 @@ server <- function(input, output, session) {
     enregistrer_reponses(2)
   })
   
-  # Fonction pour enregistrer les réponses
+  # Fonction pour enregistrer les réponses AVEC COMMENTAIRES
   enregistrer_reponses <- function(page_id) {
     cfg <- if (page_id == 1) global_config$page1 else global_config$page2
     panelist_name <- input[[paste0("panelist_name_", page_id)]]
@@ -1254,21 +1297,25 @@ server <- function(input, output, session) {
       
       for (etape in cfg$etapes) {
         supports <- cfg$supports[[etape]]
-        if (!is.null(supports)) {
+        commentaire <- input[[paste0("comment_", i, "_", etape)]] %||% ""
+        
+        if (!is.null(supports) && length(supports) > 0) {
           for (support in supports) {
             input_id <- paste0("strength_", produit, "_", etape, "_", support)
             val <- input[[input_id]]
+            
             if (!is.null(val)) {
               response <- list(
                 timestamp = Sys.time(),
                 paneliste = panelist_name,
-                code_produit = code_produit,  # Code spécifique au produit
+                code_produit = code_produit,
                 produit = produit,
                 base = cfg$base,
                 attribut = "Strength",
                 etape = etape,
                 support = support,
-                note = val
+                note = val,
+                commentaire = commentaire  # Nouvelle colonne
               )
               responses[[length(responses) + 1]] <- as.data.frame(response, stringsAsFactors = FALSE)
             }

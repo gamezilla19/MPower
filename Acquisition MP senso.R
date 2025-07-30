@@ -73,11 +73,14 @@ ui <- fluidPage(
         padding: 10px;
         border-radius: 5px;
         margin-bottom: 10px;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
       }
       .product-input-group:focus-within {
         border-color: #80bdff !important;
         box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25) !important;
-        transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out;
+      }
+      .product-inputs-wrapper {
+        min-height: 50px;
       }
       .btn-sm {
         padding: 3px 8px;
@@ -169,7 +172,7 @@ ui <- fluidPage(
         border-color: #007bff #007bff #007bff !important;
       }
       
-      /* CONTENU DES ONGLETS AVEC SCROLL SÉPARÉ - CORRECTION POUR FORCER L'AFFICHAGE */
+      /* CONTENU DES ONGLETS AVEC SCROLL SÉPARÉ */
       .tab-content {
         border: 1px solid #dee2e6;
         border-top: none;
@@ -182,7 +185,7 @@ ui <- fluidPage(
         height: 100%;
         overflow-y: auto;
         padding: 20px;
-        display: block !important; /* Override Bootstrap par défaut */
+        display: block !important;
         opacity: 1 !important;
         visibility: visible !important;
       }
@@ -233,8 +236,12 @@ ui <- fluidPage(
       }
     ")),
     
-    # JavaScript pour gérer les onglets et éviter la fermeture de modal
+    # JavaScript amélioré pour la gestion des onglets et la préservation du focus
     tags$script(HTML("
+      // Enhanced focus preservation system
+      let focusState = null;
+      let isUpdating = false;
+      
       $(document).ready(function() {
         // Gestion des onglets Bootstrap
         $(document).on('click', '[data-toggle=\"tab\"]', function(e) {
@@ -248,6 +255,65 @@ ui <- fluidPage(
           // Activer l'onglet cliqué
           $(this).addClass('active');
           $(target).addClass('show active');
+        });
+        
+        // Capture focus state before any potential UI updates
+        $(document).on('focusin', 'input[type=\"text\"]', function() {
+          if (!isUpdating) {
+            focusState = {
+              id: this.id,
+              value: this.value,
+              start: this.selectionStart,
+              end: this.selectionEnd
+            };
+          }
+        });
+        
+        // Monitor input changes to preserve cursor position
+        $(document).on('input', 'input[type=\"text\"]', function() {
+          if (focusState && this.id === focusState.id) {
+            focusState.value = this.value;
+            focusState.start = this.selectionStart;
+            focusState.end = this.selectionEnd;
+          }
+        });
+        
+        // Restore focus after UI updates
+        window.restoreFocus = function() {
+          if (focusState && !isUpdating) {
+            isUpdating = true;
+            setTimeout(function() {
+              const elem = document.getElementById(focusState.id);
+              if (elem) {
+                elem.focus();
+                elem.setSelectionRange(focusState.start, focusState.end);
+              }
+              isUpdating = false;
+            }, 50);
+          }
+        };
+        
+        // Monitor for input container changes
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.target.id === 'product_inputs_container') {
+              setTimeout(window.restoreFocus, 100);
+            }
+          });
+        });
+        
+        // Start observing when admin panel is opened
+        $(document).on('shown.bs.modal', '.admin-modal', function() {
+          const container = document.getElementById('product_inputs_container');
+          if (container) {
+            observer.observe(container, { childList: true, subtree: true });
+          }
+          // Force binding and trigger change events
+          Shiny.bindAll(document.getElementById('product_inputs_container'));
+          setTimeout(() => {
+            Shiny.setInputValue('force_render', Date.now());
+          }, 500);
+
         });
         
         // Empêcher la fermeture de modal lors des confirmations
@@ -311,9 +377,9 @@ server <- function(input, output, session) {
   # Reactive values pour stocker la configuration de l'etude
   global_config <- reactiveValues(
     page = 1,
-    page1 = list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list()),
-    page2 = list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list()),
-    panelistes = panelistes_connus,  # Liste dynamique des panélistes
+    page1 = list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list()),
+    page2 = list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list()),
+    panelistes = panelistes_connus,
     admin_logged = FALSE,
     show_admin = FALSE,
     initialized = FALSE,
@@ -322,20 +388,13 @@ server <- function(input, output, session) {
     temp_codes = list(),
     # État de sauvegarde
     products_saved = TRUE,
-    show_save_confirmation = FALSE
+    show_save_confirmation = FALSE,
+    # Nouvel état pour contrôler les mises à jour
+    ui_updating = FALSE
   )
   
-  # Add reactive values for dynamic product inputs
-  product_counter <- reactiveValues(count = 1)
-  product_ids <- reactiveVal(1)
-  
-  # NOUVEAU : Reactive value pour contrôler les changements de produits
-  products_changed <- reactiveVal(0)
-  
-  # DÉLAI DYNAMIQUE basé sur la complexité
-  delay_time <- reactive({
-    max(100, length(product_ids()) * 10)
-  })
+  # Reactive values for dynamic product inputs
+  product_ids <- reactiveVal(integer(0))
   
   # ========== FONCTIONS AMÉLIORÉES ==========
   
@@ -358,47 +417,22 @@ server <- function(input, output, session) {
     !identical(saved_products, temp_products_clean) || !identical(saved_codes, temp_codes_clean)
   }
   
-  # Fonctions de contrôle améliorées pour éviter les boucles
-  check_input_integrity <- function(type, id) {
-    input_val <- switch(type,
-                        "product" = input[[paste0("admin_produit", id)]],
-                        "code" = input[[paste0("admin_code_produit", id)]]) %||% ""
-    
-    stored_val <- switch(type,
-                         "product" = global_config$temp_products[[as.character(id)]] %||% "",
-                         "code" = global_config$temp_codes[[as.character(id)]] %||% "")
-    
-    !identical(trimws(input_val), trimws(stored_val))
-  }
-  
-  update_config_safely <- function(type, id, value) {
-    isolate({
-      if (type == "product") {
-        global_config$temp_products[[as.character(id)]] <- value
-      } else {
-        global_config$temp_codes[[as.character(id)]] <- value
-      }
-      global_config$products_saved <- FALSE
-    })
-  }
-  
-  # Initialize configuration on startup - MODIFIÉ pour inclure les panélistes
+  # CHARGEMENT INITIAL AMÉLIORÉ - Initialize configuration on startup
   observe({
-    if (!global_config$initialized && file.exists(config_file)) {
-      conf <- readRDS(config_file)
-      global_config$page1 <- conf$page1 %||% list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list())
-      global_config$page2 <- conf$page2 %||% list(produits = NULL, codes_produits = NULL, base = NULL, etapes = NULL, supports = list())
+    if (!global_config$initialized) {
+      if (file.exists(config_file)) {
+        conf <- readRDS(config_file)
+        # Forcer le chargement des deux pages avec valeurs par défaut
+        global_config$page1 <- conf$page1 %||% list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list())
+        global_config$page2 <- conf$page2 %||% list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list())
+        
+        # Charger les panélistes sauvegardés ou utiliser la liste par défaut
+        global_config$panelistes <- conf$panelistes %||% panelistes_connus
+      }
       
-      # Charger les panélistes sauvegardés ou utiliser la liste par défaut
-      global_config$panelistes <- conf$panelistes %||% panelistes_connus
-      
-      # Initialize product IDs based on existing products
-      max_products <- max(
-        length(global_config$page1$produits %||% character(0)),
-        length(global_config$page2$produits %||% character(0)),
-        1
-      )
-      product_ids(seq_len(max_products))
+      # Initialisation explicite des IDs pour la page courante
+      current_cfg <- if (global_config$page == 1) global_config$page1 else global_config$page2
+      product_ids(seq_along(current_cfg$produits %||% character(0)))
       
       # Initialisation des valeurs temporaires
       load_temp_products_for_page(global_config$page)
@@ -409,7 +443,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # Fonction pour charger les produits temporaires d'une page - CORRIGÉE
+  # GESTION DES DONNÉES TEMPORAIRES AMÉLIORÉE - Fonction pour charger les produits temporaires d'une page
   load_temp_products_for_page <- function(page_num) {
     cfg <- if (page_num == 1) global_config$page1 else global_config$page2
     
@@ -417,61 +451,137 @@ server <- function(input, output, session) {
     produits <- cfg$produits %||% character(0)
     codes <- cfg$codes_produits %||% character(0)
     
-    # Synchronisation parfaite des IDs
-    if (length(produits) == 0 && length(codes) == 0) {
-      product_ids(integer(0))  # Aucun ID si vide
-      global_config$temp_products <- list()
-      global_config$temp_codes <- list()
-    } else {
-      product_ids(seq_along(produits))
-      # Remplissage initial avec noms explicites
-      global_config$temp_products <- setNames(as.list(produits), seq_along(produits))
-      global_config$temp_codes <- setNames(as.list(codes), seq_along(codes))
-    }
+    # Réinitialisation atomique
+    isolate({
+      if (length(produits) == 0 && length(codes) == 0) {
+        product_ids(integer(0))
+        global_config$temp_products <- list()
+        global_config$temp_codes <- list()
+      } else {
+        ids <- seq_along(produits)
+        product_ids(ids)
+        # Remplissage initial avec noms explicites
+        global_config$temp_products <- setNames(as.list(produits), ids)
+        global_config$temp_codes <- setNames(as.list(codes), ids)
+      }
+    })
     
     # État sauvegardé si aucune modification
     global_config$products_saved <- TRUE
   }
   
-  # OBSERVATEURS OPTIMISÉS - VERSION CORRIGÉE avec debounce
+  # NOUVEAU SYSTÈME DE GESTION DES INPUTS AVEC UI STABLE
   observeEvent(product_ids(), {
+    # Marquer que l'UI est en cours de mise à jour
+    global_config$ui_updating <- TRUE
+    
+    # Clear existing inputs first
+    removeUI(selector = "#product_inputs_container > div", multiple = TRUE)
+    
+    ids <- product_ids()
+    if (length(ids) == 0) {
+      insertUI(
+        selector = "#product_inputs_container",
+        ui = div(class = "alert alert-info",
+                 tagList(icon("info-circle"), 
+                         " Aucun produit configuré. Cliquez sur 'Ajouter un produit'."))
+      )
+    } else {
+      # Insert fresh inputs with preserved values
+      lapply(ids, function(i) {
+        current_product <- global_config$temp_products[[as.character(i)]] %||% ""
+        current_code <- global_config$temp_codes[[as.character(i)]] %||% ""
+        
+        insertUI(
+          selector = "#product_inputs_container",
+          ui = div(
+            class = "product-input-group", 
+            id = paste0("product_group_", i),
+            div(style = "display: flex; gap: 10px; margin-bottom: 10px;",
+                div(style = "flex: 1;",
+                    textInput(paste0("admin_produit", i), 
+                              paste("Produit", i),
+                              value = current_product,
+                              placeholder = "Nom du produit")
+                ),
+                div(style = "flex: 1;",
+                    textInput(paste0("admin_code_produit", i), 
+                              paste("Code", i),
+                              value = current_code,
+                              placeholder = "Code produit")
+                ),
+                if(length(ids) > 1) {
+                  div(style = "flex: 0 0 auto; padding-top: 25px;",
+                      actionButton(paste0("remove_", i), "", 
+                                   icon = icon("times"),
+                                   class = "btn-danger btn-sm")
+                  )
+                }
+            )
+          )
+        )
+      })
+    }
+    
+    # Marquer la fin de la mise à jour
+    delay(100, {
+      global_config$ui_updating <- FALSE
+    })
+    
+  }, ignoreNULL = FALSE, priority = 100)
+  
+  # Enhanced input observers with better debouncing
+  observe({
     ids <- product_ids()
     lapply(ids, function(i) {
       local({
         id <- i
-        input_name <- paste0("admin_produit", id)
-        code_name <- paste0("admin_code_produit", id)
         
-        # Créer des reactive expressions avec debounce
-        product_input_debounced <- debounce(reactive({
-          input[[input_name]]
-        }), 500)
-        
-        code_input_debounced <- debounce(reactive({
-          input[[code_name]]
-        }), 500)
-        
-        # Observateurs sans throttle
-        observeEvent(product_input_debounced(), {
-          if (check_input_integrity("product", id)) {
-            update_config_safely("product", id, product_input_debounced())
-            products_changed(products_changed() + 1)
+        # Product name observer with debounce
+        observeEvent(input[[paste0("admin_produit", id)]], {
+          if (!global_config$ui_updating) {
+            new_value <- input[[paste0("admin_produit", id)]] %||% ""
+            old_value <- global_config$temp_products[[as.character(id)]] %||% ""
+            
+            if (!identical(trimws(new_value), trimws(old_value))) {
+              isolate({
+                global_config$temp_products[[as.character(id)]] <- new_value
+                global_config$products_saved <- FALSE
+              })
+            }
           }
         }, ignoreInit = TRUE)
         
-        observeEvent(code_input_debounced(), {
-          if (check_input_integrity("code", id)) {
-            update_config_safely("code", id, code_input_debounced())
-            products_changed(products_changed() + 1)
+        # Product code observer with debounce
+        observeEvent(input[[paste0("admin_code_produit", id)]], {
+          if (!global_config$ui_updating) {
+            new_value <- input[[paste0("admin_code_produit", id)]] %||% ""
+            old_value <- global_config$temp_codes[[as.character(id)]] %||% ""
+            
+            if (!identical(trimws(new_value), trimws(old_value))) {
+              isolate({
+                global_config$temp_codes[[as.character(id)]] <- new_value
+                global_config$products_saved <- FALSE
+              })
+            }
           }
         }, ignoreInit = TRUE)
       })
     })
-  }, ignoreNULL = FALSE)
+  })
   
-  # Observer pour changer de page - AMÉLIORÉS
+  # NOUVEL OBSERVATEUR POUR LES CHANGEMENTS DE PAGE
+  observeEvent(global_config$page, {
+    runjs("$('#config-tab').trigger('shown.bs.tab')")
+    updateTabsetPanel(session, "tabs", selected = paste0("Questionnaire - Page ", global_config$page))
+  })
+  
+  observeEvent(input$force_render, {
+    load_temp_products_for_page(global_config$page)
+    product_ids(seq_along(global_config[[paste0("page", global_config$page)]]$produits))
+  })
+  # Observer pour changer de page
   observeEvent(input$setup_page1, {
-    # Vérifier s'il y a des changements réels
     if (has_real_changes()) {
       showNotification("Modifications non sauvegardées détectées", type = "warning")
       return()
@@ -481,7 +591,6 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$setup_page2, {
-    # Vérifier s'il y a des changements réels
     if (has_real_changes()) {
       showNotification("Modifications non sauvegardées détectées", type = "warning")
       return()
@@ -490,7 +599,65 @@ server <- function(input, output, session) {
     load_temp_products_for_page(2)
   })
   
-  # Sauvegarde manuelle des produits - AMÉLIORÉE
+  # Enhanced add product functionality
+  observeEvent(input$add_product, {
+    current_ids <- product_ids()
+    new_id <- if(length(current_ids) == 0) 1 else max(current_ids) + 1
+    
+    # Update IDs first
+    product_ids(c(current_ids, new_id))
+    
+    # Initialize temp values
+    isolate({
+      global_config$temp_products[[as.character(new_id)]] <- ""
+      global_config$temp_codes[[as.character(new_id)]] <- ""
+      global_config$products_saved <- FALSE
+    })
+    
+    # Focus management with delay
+    delay(200, {
+      runjs(sprintf("
+        const elem = document.getElementById('admin_produit%d');
+        if (elem) {
+          elem.focus();
+          elem.select();
+        }
+      ", new_id))
+    })
+  })
+  
+  # Enhanced remove functionality
+  observe({
+    ids <- product_ids()
+    lapply(ids, function(i) {
+      observeEvent(input[[paste0("remove_", i)]], {
+        # Remove from UI immediately
+        removeUI(selector = paste0("#product_group_", i))
+        
+        # Update data structures
+        isolate({
+          global_config$temp_products[[as.character(i)]] <- NULL
+          global_config$temp_codes[[as.character(i)]] <- NULL
+          product_ids(setdiff(product_ids(), i))
+          global_config$products_saved <- FALSE
+        })
+        
+        # Focus management after removal
+        delay(150, {
+          remaining_ids <- product_ids()
+          if (length(remaining_ids) > 0) {
+            last_id <- max(remaining_ids)
+            runjs(sprintf("
+              const elem = document.getElementById('admin_produit%d');
+              if (elem) elem.focus();
+            ", last_id))
+          }
+        })
+      }, ignoreInit = TRUE)
+    })
+  })
+  
+  # SAUVEGARDE MANUELLE DES PRODUITS AVEC SYNCHRONISATION RENFORCÉE
   observeEvent(input$save_products, {
     # Filtrer les entrées réellement vides
     produits_valides <- unlist(global_config$temp_products) %>% 
@@ -509,7 +676,7 @@ server <- function(input, output, session) {
       return()
     }
     
-    # Mise à jour atomique
+    # MISE À JOUR EXPLICITE DES DEUX PAGES
     isolate({
       if (global_config$page == 1) {
         global_config$page1$produits <- produits_valides
@@ -527,6 +694,9 @@ server <- function(input, output, session) {
       ), file = config_file)
     })
     
+    # RAFRAÎCHISSEMENT FORCÉ
+    load_temp_products_for_page(global_config$page)
+    
     # Marquer comme sauvegardé
     global_config$products_saved <- TRUE
     
@@ -535,7 +705,6 @@ server <- function(input, output, session) {
     showNotification(paste("Produits de la Page", global_config$page, "sauvegardés avec succès !"), 
                      type = "message", duration = 3)
     
-    # Utiliser delay au lieu de once = TRUE
     delay(3000, {
       global_config$show_save_confirmation <- FALSE
     })
@@ -572,7 +741,7 @@ server <- function(input, output, session) {
     showNotification(paste("Panéliste", new_name, "ajouté avec succès !"), type = "message")
   })
   
-  # Supprimer un panéliste (observateur dynamique) - CORRIGÉ
+  # Supprimer un panéliste (observateur dynamique)
   observe({
     lapply(global_config$panelistes, function(panelist) {
       btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
@@ -580,7 +749,7 @@ server <- function(input, output, session) {
         # Stocker le panéliste à supprimer
         global_config$panelist_to_delete <- panelist
         
-        # Modal de confirmation SANS fermer la modal principale
+        # Modal de confirmation
         showModal(modalDialog(
           title = tagList(icon("exclamation-triangle", style = "color: #dc3545;"), "Confirmer la suppression"),
           div(
@@ -607,7 +776,7 @@ server <- function(input, output, session) {
     removeModal()
   })
   
-  # Confirmer la suppression - CORRIGÉ
+  # Confirmer la suppression
   observeEvent(input$confirm_delete_panelist, {
     panelist_to_remove <- global_config$panelist_to_delete
     
@@ -669,8 +838,11 @@ server <- function(input, output, session) {
     }
   })
   
-  # Modal du panel admin avec onglets AMÉLIORÉE - CORRECTION MAJEURE
+  # MÉCANISME DE RAFRAÎCHISSEMENT DE L'UI - Modal du panel admin avec onglets AMÉLIORÉE
   observeEvent(input$show_admin_panel, {
+    # Forcer le rechargement des produits
+    load_temp_products_for_page(global_config$page)
+    
     showModal(modalDialog(
       title = tagList(icon("cogs"), "Configuration de l'étude"),
       size = "l",
@@ -731,7 +903,7 @@ server <- function(input, output, session) {
         }
       }, 150);
     ")
-  })
+  }, priority = 1000)
   
   observeEvent(input$close_admin, {
     removeModal()
@@ -802,253 +974,11 @@ server <- function(input, output, session) {
     )
   })
   
-  # RENDERUI OPTIMISÉ avec gestion des cas vides
-  output$dynamic_product_inputs <- renderUI({
-    req(global_config$admin_logged)
-    
-    # Capture précise de l'état avant rendu
-    runjs("
-      const active = document.activeElement;
-      window.preserveFocusState = active && active.matches('input[type=\"text\"]') ? {
-        id: active.id,
-        value: active.value,
-        start: active.selectionStart,
-        end: active.selectionEnd
-      } : null;
-    ")
-    
-    # Gestion du cas où il n'y a pas de produits
-    ids <- product_ids()
-    if (length(ids) == 0) {
-      product_inputs <- list(
-        div(class = "alert alert-info",
-            tagList(icon("info-circle"), " Aucun produit configuré pour cette page. Cliquez sur 'Ajouter un produit' pour commencer."))
-      )
-    } else {
-      # Génération des inputs
-      product_inputs <- lapply(ids, function(i) {
-        # Utiliser les valeurs temporaires
-        current_product <- if (!is.null(global_config$temp_products[[as.character(i)]])) {
-          global_config$temp_products[[as.character(i)]]
-        } else {
-          ""
-        }
-        
-        current_code <- if (!is.null(global_config$temp_codes[[as.character(i)]])) {
-          global_config$temp_codes[[as.character(i)]]
-        } else {
-          ""
-        }
-        
-        div(class = "product-input-group", style = "margin-bottom: 10px;",
-            div(style = "display: flex; gap: 10px;",
-                textInput(paste0("admin_produit", i), paste("Produit", i),
-                          value = current_product,
-                          placeholder = "Nom du produit"),
-                textInput(paste0("admin_code_produit", i), paste("Code", i),
-                          value = current_code,
-                          placeholder = "Code produit")
-            ),
-            if (i > 1 || length(ids) > 1) {
-              actionButton(paste0("remove_", i), "", icon = icon("times"),
-                           class = "btn-danger btn-sm",
-                           style = "margin-top: 5px;")
-            }
-        )
-      })
-    }
-    
-    # Restauration différée avec contrôle de cohérence
-    delay(delay_time(), {
-      runjs("
-        if (window.preserveFocusState) {
-          const elem = document.getElementById(window.preserveFocusState.id);
-          if (elem && elem.value === window.preserveFocusState.value) {
-            elem.setSelectionRange(window.preserveFocusState.start, window.preserveFocusState.end);
-            elem.focus();
-          }
-        }
-      ")
-    })
-    
-    # Section complète avec header et boutons
-    div(class = "products-section",
-        div(class = "products-header",
-            h4(tagList(icon("boxes"), "Produits et codes")),
-            div(
-              actionButton("save_products", "Sauvegarder les produits", 
-                           icon = icon("save"), 
-                           class = if (global_config$products_saved) "btn-success" else "btn-warning"),
-              if (global_config$show_save_confirmation) {
-                span(class = "save-confirmation show", "✓ Sauvegardé !")
-              } else {
-                span(class = "save-confirmation", "")
-              }
-            )
-        ),
-        product_inputs,
-        div(style = "margin-top: 15px;",
-            actionButton("add_product", "Ajouter un produit", 
-                         icon = icon("plus"), class = "btn-primary btn-sm"),
-            if (has_real_changes()) {
-              span(style = "color: #ffc107; margin-left: 15px; font-style: italic;",
-                   icon("exclamation-triangle"), " Modifications non sauvegardées")
-            }
-        )
-    )
-  })
-  
-  # Liaison avec products_changed()
-  observeEvent(products_changed(), {
-    # Forcer le re-rendu du dynamic_product_inputs
-    output$dynamic_product_inputs <- renderUI({
-      req(global_config$admin_logged)
-      
-      # Capture précise de l'état avant rendu
-      runjs("
-        const active = document.activeElement;
-        window.preserveFocusState = active && active.matches('input[type=\"text\"]') ? {
-          id: active.id,
-          value: active.value,
-          start: active.selectionStart,
-          end: active.selectionEnd
-        } : null;
-      ")
-      
-      # Gestion du cas où il n'y a pas de produits
-      ids <- product_ids()
-      if (length(ids) == 0) {
-        product_inputs <- list(
-          div(class = "alert alert-info",
-              tagList(icon("info-circle"), " Aucun produit configuré pour cette page. Cliquez sur 'Ajouter un produit' pour commencer."))
-        )
-      } else {
-        # Génération des inputs
-        product_inputs <- lapply(ids, function(i) {
-          # Utiliser les valeurs temporaires
-          current_product <- if (!is.null(global_config$temp_products[[as.character(i)]])) {
-            global_config$temp_products[[as.character(i)]]
-          } else {
-            ""
-          }
-          
-          current_code <- if (!is.null(global_config$temp_codes[[as.character(i)]])) {
-            global_config$temp_codes[[as.character(i)]]
-          } else {
-            ""
-          }
-          
-          div(class = "product-input-group", style = "margin-bottom: 10px;",
-              div(style = "display: flex; gap: 10px;",
-                  textInput(paste0("admin_produit", i), paste("Produit", i),
-                            value = current_product,
-                            placeholder = "Nom du produit"),
-                  textInput(paste0("admin_code_produit", i), paste("Code", i),
-                            value = current_code,
-                            placeholder = "Code produit")
-              ),
-              if (i > 1 || length(ids) > 1) {
-                actionButton(paste0("remove_", i), "", icon = icon("times"),
-                             class = "btn-danger btn-sm",
-                             style = "margin-top: 5px;")
-              }
-          )
-        })
-      }
-      
-      # Restauration différée avec contrôle de cohérence
-      delay(delay_time(), {
-        runjs("
-          if (window.preserveFocusState) {
-            const elem = document.getElementById(window.preserveFocusState.id);
-            if (elem && elem.value === window.preserveFocusState.value) {
-              elem.setSelectionRange(window.preserveFocusState.start, window.preserveFocusState.end);
-              elem.focus();
-            }
-          }
-        ")
-      })
-      
-      # Section complète avec header et boutons
-      div(class = "products-section",
-          div(class = "products-header",
-              h4(tagList(icon("boxes"), "Produits et codes")),
-              div(
-                actionButton("save_products", "Sauvegarder les produits", 
-                             icon = icon("save"), 
-                             class = if (global_config$products_saved) "btn-success" else "btn-warning"),
-                if (global_config$show_save_confirmation) {
-                  span(class = "save-confirmation show", "✓ Sauvegardé !")
-                } else {
-                  span(class = "save-confirmation", "")
-                }
-              )
-          ),
-          product_inputs,
-          div(style = "margin-top: 15px;",
-              actionButton("add_product", "Ajouter un produit", 
-                           icon = icon("plus"), class = "btn-primary btn-sm"),
-              if (has_real_changes()) {
-                span(style = "color: #ffc107; margin-left: 15px; font-style: italic;",
-                     icon("exclamation-triangle"), " Modifications non sauvegardées")
-              }
-          )
-      )
-    })
-  }, ignoreInit = TRUE)
-  
-  # AJOUT/SUPPRESSION OPTIMISÉS
-  observeEvent(input$add_product, {
-    new_id <- if (length(product_ids()) == 0) 1 else max(product_ids()) + 1
-    product_ids(c(product_ids(), new_id))
-    
-    isolate({
-      # Initialiser avec des valeurs vides
-      global_config$temp_products[[as.character(new_id)]] <- ""
-      global_config$temp_codes[[as.character(new_id)]] <- ""
-      global_config$products_saved <- FALSE
-    })
-    
-    # Focus automatique sur le nouveau champ
-    delay(delay_time(), {
-      runjs(sprintf("document.getElementById('admin_produit%d').focus()", new_id))
-    })
-  })
-  
-  # Gestion dynamique des observateurs de suppression
-  observe({
-    lapply(product_ids(), function(i) {
-      if (i > 1 || length(product_ids()) > 1) {
-        observeEvent(input[[paste0("remove_", i)]], {
-          # Supprimer des valeurs temporaires
-          global_config$temp_products[[as.character(i)]] <- NULL
-          global_config$temp_codes[[as.character(i)]] <- NULL
-          # Supprimer de la liste des IDs
-          updated_ids <- setdiff(product_ids(), i)
-          product_ids(updated_ids)
-          global_config$products_saved <- FALSE
-          
-          # Focus management après suppression avec délai adaptatif
-          delay(delay_time(), {
-            runjs("
-              const inputs = document.querySelectorAll('[id^=\"admin_produit\"]');
-              if (inputs.length > 0) inputs[inputs.length-1].focus();
-            ")
-          })
-        }, ignoreInit = TRUE)
-      }
-    })
-  })
-  
-  # ========== CONTENU DE L'ONGLET CONFIGURATION ==========
+  # ========== CONTENU DE L'ONGLET CONFIGURATION AVEC UI STABLE ==========
   output$admin_config_content <- renderUI({
     req(global_config$admin_logged)
     
-    # Déclencheur réactif supplémentaire
-    input$show_admin_panel
-    
     etapes_choices <- c("NEAT", "BLOOM", "WET", "DRY", "DRYER")
-    
     cfg <- if (global_config$page == 1) global_config$page1 else global_config$page2
     
     tagList(
@@ -1065,8 +995,27 @@ server <- function(input, output, session) {
           h5(paste("Configuration actuelle : Page", global_config$page))
       ),
       
-      # Configuration des produits
-      uiOutput("dynamic_product_inputs"),
+      # Configuration des produits - CONTENEUR STABLE
+      div(class = "products-section",
+          div(class = "products-header",
+              h4(tagList(icon("boxes"), "Produits et codes")),
+              div(
+                actionButton("save_products", "Sauvegarder les produits", 
+                             icon = icon("save"), 
+                             class = "btn-warning"),
+                uiOutput("save_confirmation_ui")
+              )
+          ),
+          # CONTENEUR STATIQUE - Ne sera jamais re-rendu
+          div(id = "product_inputs_container",
+              class = "product-inputs-wrapper"
+          ),
+          div(style = "margin-top: 15px;",
+              actionButton("add_product", "Ajouter un produit", 
+                           icon = icon("plus"), class = "btn-primary btn-sm"),
+              uiOutput("unsaved_changes_indicator")
+          )
+      ),
       
       # Configuration de base
       div(class = "config-section",
@@ -1101,6 +1050,22 @@ server <- function(input, output, session) {
     )
   })
   
+  # Enhanced UI feedback components
+  output$save_confirmation_ui <- renderUI({
+    if (global_config$show_save_confirmation) {
+      span(class = "save-confirmation show", 
+           style = "color: #28a745; font-weight: bold; margin-left: 10px;",
+           "✓ Sauvegardé !")
+    }
+  })
+  
+  output$unsaved_changes_indicator <- renderUI({
+    if (has_real_changes()) {
+      span(style = "color: #ffc107; margin-left: 15px; font-style: italic;",
+           icon("exclamation-triangle"), " Modifications non sauvegardées")
+    }
+  })
+  
   output$support_inputs <- renderUI({
     req(input$admin_etapes)
     cfg <- if (global_config$page == 1) global_config$page1 else global_config$page2
@@ -1117,7 +1082,7 @@ server <- function(input, output, session) {
     })
   })
   
-  # Fonction pour enregistrer la configuration
+  # SYNCHRONISATION RENFORCÉE - Fonction pour enregistrer la configuration
   enregistrer_config <- function(page_num) {
     req(input$admin_base, input$admin_etapes)
     
@@ -1137,6 +1102,7 @@ server <- function(input, output, session) {
       supports = supports_list
     )
     
+    # Mise à jour explicite des deux pages
     if (page_num == 1) {
       global_config$page1 <- config
     } else {
@@ -1162,8 +1128,17 @@ server <- function(input, output, session) {
                      type = "message", duration = 3)
   })
   
-  # Fonction pour générer l'interface des questionnaires
+  # GESTION DES ÉTATS VIDES - Fonction pour générer l'interface des questionnaires
   render_questionnaire_ui <- function(cfg) {
+    # Gestion des états vides
+    if (length(cfg$produits) == 0) {
+      return(
+        div(class = "alert alert-info",
+            tagList(icon("info-circle"), 
+                    " Aucun produit configuré - Veuillez ajouter des produits via le panel Admin"))
+      )
+    }
+    
     req(cfg$produits, cfg$base, cfg$etapes, cfg$supports)
     
     produit_panels <- lapply(seq_along(cfg$produits), function(i) {
@@ -1219,7 +1194,7 @@ server <- function(input, output, session) {
   
   # Génération des interfaces de questionnaire
   output$questionnaire_ui1 <- renderUI({ 
-    if (!is.null(global_config$page1$produits)) {
+    if (!is.null(global_config$page1$produits) && length(global_config$page1$produits) > 0) {
       render_questionnaire_ui(c(global_config$page1, list(page_id = 1)))
     } else {
       div(class = "alert alert-warning", 
@@ -1230,7 +1205,7 @@ server <- function(input, output, session) {
   })
   
   output$questionnaire_ui2 <- renderUI({ 
-    if (!is.null(global_config$page2$produits)) {
+    if (!is.null(global_config$page2$produits) && length(global_config$page2$produits) > 0) {
       render_questionnaire_ui(c(global_config$page2, list(page_id = 2)))
     } else {
       div(class = "alert alert-warning", 

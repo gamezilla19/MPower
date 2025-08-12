@@ -111,6 +111,107 @@ ui <- fluidPage(
         padding-bottom: 10px;
       }
       
+      /* STYLES AMÉLIORÉS POUR LA GESTION DES FICHES (jusqu'à 10) */
+      .sheet-management {
+        background: #fff3cd;
+        border: 2px solid #ffc107;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      
+      .sheet-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+      
+      .sheet-status {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 15px;
+        background: white;
+        border-radius: 8px;
+        border: 2px solid #dee2e6;
+        transition: all 0.2s ease;
+      }
+      
+      .sheet-status:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0,123,255,0.15);
+      }
+      
+      .sheet-indicator {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+      }
+      
+      .sheet-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-weight: bold;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      
+      .sheet-active {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+      
+      .sheet-inactive {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+      
+      .sheet-actions {
+        display: flex;
+        gap: 8px;
+      }
+      
+      .sheet-preview {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 15px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      
+      .preview-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px dashed #dee2e6;
+        font-size: 13px;
+      }
+      
+      .preview-item:last-child {
+        border-bottom: none;
+      }
+      
+      /* STYLES POUR LES BOUTONS DE PAGE (jusqu'à 10) */
+      .page-buttons-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      
+      .page-button {
+        padding: 10px 15px !important;
+        font-size: 13px !important;
+        border-radius: 6px !important;
+        transition: all 0.2s ease !important;
+      }
+      
       /* STYLES AMÉLIORÉS POUR LES PANÉLISTES */
       .panelist-item {
         display: flex;
@@ -172,23 +273,23 @@ ui <- fluidPage(
         border-color: #007bff #007bff #007bff !important;
       }
       
-      /* CONTENU DES ONGLETS AVEC SCROLL SÉPARÉ */
+      /* CONTENU DES ONGLETS ENTIÈREMENT ADAPTATIF */
       .tab-content {
         border: 1px solid #dee2e6;
         border-top: none;
         background: white;
         border-radius: 0 0 8px 8px;
-        height: 70vh;
         overflow: hidden;
       }
       .tab-pane {
-        height: 100%;
         overflow-y: auto;
         padding: 20px;
         display: block !important;
         opacity: 1 !important;
         visibility: visible !important;
       }
+
+
       
       .tab-pane:not(.active) {
         height: 0;
@@ -253,6 +354,12 @@ ui <- fluidPage(
         }
         .tab-content {
           height: 60vh;
+        }
+        .sheet-grid {
+          grid-template-columns: 1fr;
+        }
+        .page-buttons-grid {
+          grid-template-columns: repeat(2, 1fr);
         }
       }
     ")),
@@ -366,26 +473,10 @@ ui <- fluidPage(
       )
   ),
   
-  # Contenu principal
+  # Contenu principal - ONGLETS DYNAMIQUES
   div(class = "main-content",
       titlePanel("Evaluation de la puissance MP"),
-      tabsetPanel(
-        id = "tabs",
-        
-        # Tab QUESTIONNAIRE PAGE 1
-        tabPanel("Questionnaire - Page 1",
-                 icon = icon("clipboard-list"),
-                 br(),
-                 uiOutput("questionnaire_ui1")
-        ),
-        
-        # Tab QUESTIONNAIRE PAGE 2
-        tabPanel("Questionnaire - Page 2",
-                 icon = icon("clipboard-list"),
-                 br(),
-                 uiOutput("questionnaire_ui2")
-        )
-      )
+      uiOutput("dynamic_tabs")
   )
 )
 
@@ -395,15 +486,30 @@ server <- function(input, output, session) {
   # Null coalescing operator
   `%||%` <- function(x, y) if (is.null(x)) y else x
   
-  # Reactive values pour stocker la configuration de l'etude
+  # CONFIGURATION ÉTENDUE POUR 10 PAGES MAXIMUM
+  init_page_config <- function() {
+    list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list())
+  }
+  
+  # Reactive values pour stocker la configuration de l'etude (ÉTENDU À 10 PAGES)
   global_config <- reactiveValues(
     page = 1,
-    page1 = list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list()),
-    page2 = list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list()),
+    page1 = init_page_config(),
+    page2 = init_page_config(),
+    page3 = init_page_config(),
+    page4 = init_page_config(),
+    page5 = init_page_config(),
+    page6 = init_page_config(),
+    page7 = init_page_config(),
+    page8 = init_page_config(),
+    page9 = init_page_config(),
+    page10 = init_page_config(),
     panelistes = panelistes_connus,
     admin_logged = FALSE,
     show_admin = FALSE,
     initialized = FALSE,
+    # NOUVEAU : Gestion des fiches actives (par défaut 1 et 2)
+    active_sheets = c(1, 2),
     # Valeurs temporaires pour l'édition des produits
     temp_products = list(),
     temp_codes = list(),
@@ -417,11 +523,96 @@ server <- function(input, output, session) {
   # Reactive values for dynamic product inputs
   product_ids <- reactiveVal(integer(0))
   
+  # ========== FONCTIONS AMÉLIORÉES POUR LA GESTION DE 10 FICHES ==========
+  
+  # Fonction pour ajouter une fiche (étendue pour 10 pages)
+  add_sheet <- function(sheet_num) {
+    if (sheet_num < 1 || sheet_num > 10) {
+      showNotification("Numéro de fiche invalide (1-10 autorisés)", type = "error")
+      return()
+    }
+    
+    if (!sheet_num %in% global_config$active_sheets) {
+      global_config$active_sheets <- sort(c(global_config$active_sheets, sheet_num))
+      
+      # Initialiser la nouvelle fiche si elle n'existe pas
+      if (is.null(global_config[[paste0("page", sheet_num)]])) {
+        global_config[[paste0("page", sheet_num)]] <- init_page_config()
+      }
+      
+      # Sauvegarder immédiatement
+      save_global_config()
+      
+      showNotification(paste("Fiche", sheet_num, "ajoutée avec succès !"), type = "message")
+    }
+  }
+  
+  # Fonction pour retirer une fiche (étendue pour 10 pages)
+  remove_sheet <- function(sheet_num) {
+    if (length(global_config$active_sheets) <= 1) {
+      showNotification("Impossible de supprimer la dernière fiche active !", type = "error")
+      return()
+    }
+    
+    if (sheet_num %in% global_config$active_sheets) {
+      global_config$active_sheets <- setdiff(global_config$active_sheets, sheet_num)
+      
+      # Si on supprime la page courante, basculer vers la première disponible
+      if (global_config$page == sheet_num) {
+        global_config$page <- min(global_config$active_sheets)
+        load_temp_products_for_page(global_config$page)
+      }
+      
+      # Sauvegarder immédiatement
+      save_global_config()
+      
+      showNotification(paste("Fiche", sheet_num, "retirée avec succès !"), type = "message")
+    }
+  }
+  
+  # Fonction pour sauvegarder la configuration globale (étendue pour 10 pages)
+  save_global_config <- function() {
+    config_to_save <- list(
+      panelistes = global_config$panelistes,
+      active_sheets = global_config$active_sheets
+    )
+    
+    # Sauvegarder toutes les pages (1 à 10)
+    for (i in 1:10) {
+      config_to_save[[paste0("page", i)]] <- global_config[[paste0("page", i)]]
+    }
+    
+    saveRDS(config_to_save, file = config_file)
+  }
+  
+  # ========== GÉNÉRATION DYNAMIQUE DES ONGLETS ==========
+  
+  output$dynamic_tabs <- renderUI({
+    active_sheets <- global_config$active_sheets
+    
+    if (length(active_sheets) == 0) {
+      return(div(class = "alert alert-warning",
+                 "Aucune fiche active. Veuillez configurer les fiches depuis le panel Admin."))
+    }
+    
+    # Créer les onglets dynamiquement
+    tab_panels <- lapply(active_sheets, function(sheet_num) {
+      tabPanel(
+        paste("Page", sheet_num),
+        icon = icon("clipboard-list"),
+        br(),
+        uiOutput(paste0("questionnaire_ui", sheet_num))
+      )
+    })
+    
+    do.call(tabsetPanel, c(list(id = "tabs"), tab_panels))
+  })
+  
   # ========== FONCTIONS AMÉLIORÉES ==========
   
   # Fonction de vérification de changements réels
   has_real_changes <- function() {
-    current_page_config <- if (global_config$page == 1) global_config$page1 else global_config$page2
+    current_page_config <- global_config[[paste0("page", global_config$page)]]
     
     # Comparer les produits
     saved_products <- current_page_config$produits %||% character(0)
@@ -438,35 +629,41 @@ server <- function(input, output, session) {
     !identical(saved_products, temp_products_clean) || !identical(saved_codes, temp_codes_clean)
   }
   
-  # CHARGEMENT INITIAL AMÉLIORÉ - Initialize configuration on startup
+  # CHARGEMENT INITIAL AMÉLIORÉ (étendu pour 10 pages)
   observe({
     if (!global_config$initialized) {
       if (file.exists(config_file)) {
         conf <- readRDS(config_file)
-        # Forcer le chargement des deux pages avec valeurs par défaut
-        global_config$page1 <- conf$page1 %||% list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list())
-        global_config$page2 <- conf$page2 %||% list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list())
+        
+        # Charger toutes les pages (1 à 10)
+        for (i in 1:10) {
+          page_key <- paste0("page", i)
+          global_config[[page_key]] <- conf[[page_key]] %||% init_page_config()
+        }
         
         # Charger les panélistes sauvegardés ou utiliser la liste par défaut
         global_config$panelistes <- conf$panelistes %||% panelistes_connus
+        
+        # Charger les fiches actives ou utiliser les valeurs par défaut
+        global_config$active_sheets <- conf$active_sheets %||% c(1, 2)
       }
       
       # Initialisation explicite des IDs pour la page courante
-      current_cfg <- if (global_config$page == 1) global_config$page1 else global_config$page2
+      current_cfg <- global_config[[paste0("page", global_config$page)]]
       product_ids(seq_along(current_cfg$produits %||% character(0)))
       
       # Initialisation des valeurs temporaires
       load_temp_products_for_page(global_config$page)
       
-      # Forcer l'état sauvegardé pour les deux pages
+      # Forcer l'état sauvegardé pour toutes les pages
       global_config$products_saved <- TRUE
       global_config$initialized <- TRUE
     }
   })
   
-  # GESTION DES DONNÉES TEMPORAIRES AMÉLIORÉE - Fonction pour charger les produits temporaires d'une page
+  # GESTION DES DONNÉES TEMPORAIRES AMÉLIORÉE
   load_temp_products_for_page <- function(page_num) {
-    cfg <- if (page_num == 1) global_config$page1 else global_config$page2
+    cfg <- global_config[[paste0("page", page_num)]]
     
     # Initialisation robuste avec vérification de longueur
     produits <- cfg$produits %||% character(0)
@@ -591,33 +788,511 @@ server <- function(input, output, session) {
     })
   })
   
-  # NOUVEL OBSERVATEUR POUR LES CHANGEMENTS DE PAGE
-  observeEvent(global_config$page, {
-    runjs("$('#config-tab').trigger('shown.bs.tab')")
-    updateTabsetPanel(session, "tabs", selected = paste0("Questionnaire - Page ", global_config$page))
+  # OBSERVATEURS DYNAMIQUES POUR LES 10 PAGES
+  observe({
+    # Créer dynamiquement les observateurs pour chaque page (1 à 10)
+    for (page_num in 1:10) {
+      local({
+        current_page <- page_num
+        
+        # Observateur pour changer de page
+        observeEvent(input[[paste0("setup_page", current_page)]], {
+          if (has_real_changes()) {
+            showNotification("Modifications non sauvegardées détectées", type = "warning")
+            return()
+          }
+          global_config$page <- current_page
+          load_temp_products_for_page(current_page)
+        })
+        
+        # Observateur pour ajouter une fiche
+        observeEvent(input[[paste0("add_sheet_", current_page)]], {
+          add_sheet(current_page)
+        })
+        
+        # Observateur pour supprimer une fiche
+        observeEvent(input[[paste0("remove_sheet_", current_page)]], {
+          remove_sheet(current_page)
+        })
+      })
+    }
   })
   
   observeEvent(input$force_render, {
     load_temp_products_for_page(global_config$page)
-    product_ids(seq_along(global_config[[paste0("page", global_config$page)]]$produits))
-  })
-  # Observer pour changer de page
-  observeEvent(input$setup_page1, {
-    if (has_real_changes()) {
-      showNotification("Modifications non sauvegardées détectées", type = "warning")
-      return()
-    }
-    global_config$page <- 1
-    load_temp_products_for_page(1)
+    current_cfg <- global_config[[paste0("page", global_config$page)]]
+    product_ids(seq_along(current_cfg$produits))
   })
   
-  observeEvent(input$setup_page2, {
-    if (has_real_changes()) {
-      showNotification("Modifications non sauvegardées détectées", type = "warning")
+  # ========== GESTION DES PANÉLISTES ==========
+  
+  # Ajouter un panéliste
+  observeEvent(input$add_panelist_btn, {
+    new_name <- trimws(input$new_panelist_name)
+    if (new_name == "") {
+      showNotification("Veuillez saisir un nom de panéliste.", type = "warning")
       return()
     }
-    global_config$page <- 2
-    load_temp_products_for_page(2)
+    
+    if (new_name %in% global_config$panelistes) {
+      showNotification("Ce panéliste existe déjà.", type = "warning")
+      return()
+    }
+    
+    # Ajouter le panéliste
+    global_config$panelistes <- c(global_config$panelistes, new_name)
+    
+    # Sauvegarder immédiatement
+    save_global_config()
+    
+    # Réinitialiser le champ
+    updateTextInput(session, "new_panelist_name", value = "")
+    
+    showNotification(paste("Panéliste", new_name, "ajouté avec succès !"), type = "message")
+  })
+  
+  # Supprimer un panéliste (observateur dynamique)
+  observe({
+    lapply(global_config$panelistes, function(panelist) {
+      btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
+      observeEvent(input[[btn_id]], {
+        # Stocker le panéliste à supprimer
+        global_config$panelist_to_delete <- panelist
+        
+        # Modal de confirmation
+        showModal(modalDialog(
+          title = tagList(icon("exclamation-triangle", style = "color: #dc3545;"), "Confirmer la suppression"),
+          div(
+            style = "text-align: center; padding: 20px;",
+            h5(paste("Êtes-vous sûr de vouloir supprimer le panéliste :")),
+            h4(style = "color: #dc3545; font-weight: bold;", panelist),
+            br(),
+            p("Cette action est irréversible.")
+          ),
+          footer = tagList(
+            actionButton("cancel_delete", "Annuler", class = "btn-secondary"),
+            actionButton("confirm_delete_panelist", "Supprimer", class = "btn-danger")
+          ),
+          size = "m",
+          easyClose = FALSE
+        ))
+      }, ignoreInit = TRUE)
+    })
+  })
+  
+  # Annuler la suppression
+  observeEvent(input$cancel_delete, {
+    global_config$panelist_to_delete <- NULL
+    removeModal()
+  })
+  
+  # Confirmer la suppression
+  observeEvent(input$confirm_delete_panelist, {
+    panelist_to_remove <- global_config$panelist_to_delete
+    
+    if (!is.null(panelist_to_remove)) {
+      # Supprimer le panéliste
+      global_config$panelistes <- setdiff(global_config$panelistes, panelist_to_remove)
+      
+      # Sauvegarder
+      save_global_config()
+      
+      showNotification(paste("Panéliste", panelist_to_remove, "supprimé avec succès."), type = "message")
+      global_config$panelist_to_delete <- NULL
+    }
+    
+    removeModal()
+  })
+  
+  output$download_results <- downloadHandler(
+    filename = function() {
+      paste0("reponses_strength_", Sys.Date(), ".csv")
+    },
+    content = function(file) {
+      file.copy(output_file, file)
+    }
+  )  
+  
+  # Modal de connexion admin
+  observeEvent(input$show_login, {
+    showModal(modalDialog(
+      title = tagList(icon("lock"), "Connexion Administrateur"),
+      size = "s",
+      fluidRow(
+        column(12,
+               textInput("admin_user", "Utilisateur", placeholder = "admin"),
+               passwordInput("admin_pass", "Mot de passe", placeholder = "••••"),
+               br(),
+               div(style = "text-align: center;",
+                   actionButton("login_btn", "Se connecter", 
+                                class = "btn-primary",
+                                icon = icon("sign-in-alt"))
+               )
+        )
+      ),
+      footer = modalButton("Annuler")
+    ))
+  })
+  
+  observeEvent(input$login_btn, {
+    if (input$admin_user == "admin" && input$admin_pass == "1234") {
+      global_config$admin_logged <- TRUE
+      removeModal()
+      showNotification("Connexion réussie !", type = "message")
+    } else {
+      showNotification("Login ou mot de passe incorrect.", type = "error")
+    }
+  })
+  
+  # MÉCANISME DE RAFRAÎCHISSEMENT DE L'UI - Modal du panel admin avec onglets AMÉLIORÉE
+  observeEvent(input$show_admin_panel, {
+    # Forcer le rechargement des produits
+    load_temp_products_for_page(global_config$page)
+    
+    showModal(modalDialog(
+      title = tagList(icon("cogs"), "Configuration de l'étude"),
+      size = "l",
+      class = "admin-modal",
+      div(class = "admin-form",
+          # Navigation par onglets avec JavaScript
+          tags$ul(class = "nav nav-tabs", role = "tablist",
+                  tags$li(class = "nav-item",
+                          tags$a(class = "nav-link active", 
+                                 `data-toggle` = "tab", 
+                                 href = "#config-tab", 
+                                 role = "tab",
+                                 tagList(icon("cogs"), "Configuration"))),
+                  tags$li(class = "nav-item",
+                          tags$a(class = "nav-link", 
+                                 `data-toggle` = "tab", 
+                                 href = "#sheets-tab", 
+                                 role = "tab",
+                                 tagList(icon("file-alt"), "Gestion des fiches"))),
+                  tags$li(class = "nav-item",
+                          tags$a(class = "nav-link", 
+                                 `data-toggle` = "tab", 
+                                 href = "#panelists-tab", 
+                                 role = "tab",
+                                 tagList(icon("users"), "Panélistes")))
+          ),
+          
+          # Contenu des onglets avec scroll séparé
+          div(class = "tab-content",
+              # Onglet Configuration
+              div(class = "tab-pane fade show active", 
+                  id = "config-tab", 
+                  role = "tabpanel",
+                  uiOutput("admin_config_content")
+              ),
+              
+              # ONGLET : Gestion des fiches (ÉTENDU À 10)
+              div(class = "tab-pane fade", 
+                  id = "sheets-tab", 
+                  role = "tabpanel",
+                  uiOutput("admin_sheets_content")
+              ),
+              
+              # Onglet Panélistes
+              div(class = "tab-pane fade", 
+                  id = "panelists-tab", 
+                  role = "tabpanel",
+                  uiOutput("admin_panelists_content")
+              )
+          )
+      ),
+      footer = tagList(
+        actionButton("close_admin", "Fermer", class = "btn-secondary")
+      )
+    ))
+    
+    # FORCER L'ACTIVATION DE L'ONGLET CONFIGURATION
+    runjs("
+      setTimeout(function() {
+        // Activer le premier onglet et son contenu
+        $('#config-tab').addClass('show active');
+        $('a[href=\"#config-tab\"]').addClass('active');
+        
+        // S'assurer que les autres onglets sont inactifs
+        $('#sheets-tab, #panelists-tab').removeClass('show active');
+        $('a[href=\"#sheets-tab\"], a[href=\"#panelists-tab\"]').removeClass('active');
+        
+        // Forcer le rendu initial
+        if (typeof Shiny !== 'undefined' && Shiny.bindAll) {
+          Shiny.bindAll(document.getElementById('config-tab'));
+        }
+      }, 150);
+    ")
+  }, priority = 1000)
+  
+  observeEvent(input$close_admin, {
+    removeModal()
+  })
+  
+  output$adminLogged <- reactive({
+    global_config$admin_logged
+  })
+  outputOptions(output, "adminLogged", suspendWhenHidden = FALSE)
+  
+  # ========== ONGLET : GESTION DES FICHES (ÉTENDU À 10 PAGES) ==========
+  output$admin_sheets_content <- renderUI({
+    req(global_config$admin_logged)
+    
+    active_sheets <- global_config$active_sheets
+    
+    # Créer les éléments pour chaque fiche possible (1 à 10)
+    sheet_elements <- lapply(1:10, function(sheet_num) {
+      is_active <- sheet_num %in% active_sheets
+      cfg <- global_config[[paste0("page", sheet_num)]]
+      
+      # Compter les produits configurés
+      nb_products <- length(cfg$produits %||% character(0))
+      
+      div(class = "sheet-status",
+          div(class = "sheet-indicator",
+              h6(paste("Page", sheet_num)),
+              span(class = paste("sheet-badge", if(is_active) "sheet-active" else "sheet-inactive"),
+                   if(is_active) "ACTIVE" else "INACTIVE"),
+              if(is_active && nb_products > 0) {
+                span(style = "color: #6c757d; font-size: 11px; margin-left: 8px;",
+                     paste("(", nb_products, "produit(s))"))
+              }
+          ),
+          div(class = "sheet-actions",
+              if(!is_active) {
+                actionButton(paste0("add_sheet_", sheet_num), 
+                             "Activer", 
+                             icon = icon("plus"),
+                             class = "btn-success btn-sm")
+              } else {
+                actionButton(paste0("remove_sheet_", sheet_num), 
+                             "Désactiver", 
+                             icon = icon("minus"),
+                             class = "btn-danger btn-sm",
+                             disabled = length(active_sheets) <= 1)
+              }
+          )
+      )
+    })
+    
+    # Aperçu des fiches actives
+    preview_elements <- if(length(active_sheets) > 0) {
+      lapply(active_sheets, function(sheet_num) {
+        cfg <- global_config[[paste0("page", sheet_num)]]
+        products <- cfg$produits %||% character(0)
+        
+        div(class = "preview-item",
+            strong(paste("Page", sheet_num, ":")),
+            span(if(length(products) > 0) {
+              if(length(products) <= 3) {
+                paste(products, collapse = ", ")
+              } else {
+                paste(paste(products[1:3], collapse = ", "), "... (", length(products), "total)")
+              }
+            } else {
+              "Non configurée"
+            })
+        )
+      })
+    } else {
+      list(div(class = "alert alert-info", "Aucune fiche active"))
+    }
+    
+    tagList(
+      div(class = "sheet-management",
+          h4(tagList(icon("file-alt"), "Gestion des fiches de test (1-10)")),
+          p("Activez ou désactivez les fiches de test selon vos besoins. Chaque fiche peut contenir ses propres produits et configurations."),
+          
+          # Grille des fiches avec layout amélioré
+          div(class = "sheet-grid", sheet_elements),
+          
+          div(class = "sheet-preview",
+              h5(tagList(icon("eye"), paste("Aperçu des fiches actives (", length(active_sheets), "/10)"))),
+              preview_elements
+          ),
+          
+          div(class = "alert alert-info", style = "margin-top: 20px;",
+              tagList(
+                icon("info-circle"),
+                " ",
+                strong("Note :"), 
+                " Les fiches désactivées conservent leur configuration mais ne sont pas visibles aux panélistes. Vous devez avoir au moins une fiche active. Maximum 10 fiches supportées."
+              )
+          )
+      )
+    )
+  })
+  
+  # ========== CONTENU DE L'ONGLET PANÉLISTES ==========
+  output$admin_panelists_content <- renderUI({
+    req(global_config$admin_logged)
+    
+    panelist_items <- lapply(global_config$panelistes, function(panelist) {
+      btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
+      
+      div(class = "panelist-item",
+          span(class = "panelist-name", panelist),
+          div(class = "panelist-actions",
+              actionButton(btn_id, "", 
+                           icon = icon("trash"), 
+                           class = "btn-danger btn-sm",
+                           title = "Supprimer ce panéliste",
+                           onclick = "event.stopPropagation();")
+          )
+      )
+    })
+    
+    tagList(
+      # Section d'ajout EN HAUT
+      div(class = "add-panelist-section",
+          h4(tagList(icon("user-plus"), "Ajouter un nouveau panéliste")),
+          fluidRow(
+            column(8,
+                   textInput("new_panelist_name", 
+                             label = NULL,
+                             placeholder = "Nom du nouveau panéliste",
+                             value = "")
+            ),
+            column(4,
+                   actionButton("add_panelist_btn", 
+                                "Ajouter", 
+                                icon = icon("plus"),
+                                class = "btn-success",
+                                style = "width: 100%;")
+            )
+          ),
+          div(class = "alert alert-info",
+              style = "margin-top: 15px;",
+              tagList(icon("lightbulb"), 
+                      " Les panélistes ajoutés seront immédiatement disponibles dans tous les questionnaires."))
+      ),
+      
+      # Liste des panélistes existants
+      div(class = "config-section",
+          h4(tagList(icon("users"), "Panélistes actuels (", length(global_config$panelistes), ")")),
+          
+          if (length(global_config$panelistes) > 0) {
+            div(class = "panelists-container",
+                panelist_items
+            )
+          } else {
+            div(class = "alert alert-info",
+                tagList(icon("info-circle"), " Aucun panéliste configuré."))
+          }
+      )
+    )
+  })
+  
+  # ========== CONTENU DE L'ONGLET CONFIGURATION (ÉTENDU À 10 PAGES) ==========
+  output$admin_config_content <- renderUI({
+    req(global_config$admin_logged)
+    
+    etapes_choices <- c("NEAT", "BLOOM", "WET", "DRY", "DRYER")
+    cfg <- global_config[[paste0("page", global_config$page)]]
+    active_sheets <- global_config$active_sheets
+    
+    # Boutons pour changer de page (seulement les fiches actives)
+    page_buttons <- lapply(active_sheets, function(sheet_num) {
+      actionButton(paste0("setup_page", sheet_num), 
+                   paste("Page", sheet_num), 
+                   class = paste("page-button", if(global_config$page == sheet_num) "btn-primary" else "btn-outline-primary"))
+    })
+    
+    tagList(
+      # Sélection de page (seulement les fiches actives)
+      div(class = "config-section",
+          h4(tagList(icon("file-alt"), "Sélection de la page à configurer")),
+          div(class = "page-buttons-grid", page_buttons),
+          div(class = "alert alert-info",
+              tagList(icon("info-circle"), 
+                      paste("Configuration actuelle : Page", global_config$page, 
+                            if(length(active_sheets) > 1) paste(" (", length(active_sheets), "pages actives)" ) else "")))
+      ),
+      
+      # Configuration des produits - CONTENEUR STABLE
+      div(class = "products-section",
+          div(class = "products-header",
+              h4(tagList(icon("boxes"), "Produits et codes")),
+              div(
+                actionButton("save_products", "Sauvegarder les produits", 
+                             icon = icon("save"), 
+                             class = "btn-warning"),
+                uiOutput("save_confirmation_ui")
+              )
+          ),
+          # CONTENEUR STATIQUE - Ne sera jamais re-rendu
+          div(id = "product_inputs_container",
+              class = "product-inputs-wrapper"
+          ),
+          div(style = "margin-top: 15px;",
+              actionButton("add_product", "Ajouter un produit", 
+                           icon = icon("plus"), class = "btn-primary btn-sm"),
+              uiOutput("unsaved_changes_indicator")
+          )
+      ),
+      
+      # Configuration de base
+      div(class = "config-section",
+          h4(tagList(icon("flask"), "Base de l'étude")),
+          selectizeInput("admin_base", NULL,
+                         choices = c("T05107", "T051M000G", "E025C004C", "Other"),
+                         selected = cfg$base,
+                         options = list(create = TRUE, placeholder = "Sélectionner ou saisir une base"))
+      ),
+      
+      # Configuration des étapes
+      div(class = "config-section",
+          h4(tagList(icon("list-ol"), "Étapes à évaluer")),
+          checkboxGroupInput("admin_etapes", NULL,
+                             choices = etapes_choices,
+                             selected = cfg$etapes,
+                             inline = TRUE)
+      ),
+      
+      # Configuration des supports
+      div(class = "config-section",
+          h4(tagList(icon("tools"), "Supports par étape")),
+          uiOutput("support_inputs")
+      ),
+      
+      # Boutons de sauvegarde GLOBALE
+      div(style = "text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;",
+          actionButton("save_config", "Sauvegarder la configuration complète", 
+                       class = "btn-success btn-lg",
+                       icon = icon("save"))
+      )
+    )
+  })
+  
+  # Enhanced UI feedback components
+  output$save_confirmation_ui <- renderUI({
+    if (global_config$show_save_confirmation) {
+      span(class = "save-confirmation show", 
+           style = "color: #28a745; font-weight: bold; margin-left: 10px;",
+           "✓ Sauvegardé !")
+    }
+  })
+  
+  output$unsaved_changes_indicator <- renderUI({
+    if (has_real_changes()) {
+      span(style = "color: #ffc107; margin-left: 15px; font-style: italic;",
+           icon("exclamation-triangle"), " Modifications non sauvegardées")
+    }
+  })
+  
+  output$support_inputs <- renderUI({
+    req(input$admin_etapes)
+    cfg <- global_config[[paste0("page", global_config$page)]]
+    
+    lapply(input$admin_etapes, function(etape) {
+      selected_supports <- if (!is.null(cfg$supports[[etape]])) cfg$supports[[etape]] else NULL
+      div(style = "margin-bottom: 15px;",
+          strong(paste("Supports pour", etape, ":")),
+          checkboxGroupInput(paste0("support_", etape), NULL,
+                             choices = c("TS", "TC", "PS", "None"),
+                             selected = selected_supports,
+                             inline = TRUE)
+      )
+    })
   })
   
   # Enhanced add product functionality
@@ -697,22 +1372,14 @@ server <- function(input, output, session) {
       return()
     }
     
-    # MISE À JOUR EXPLICITE DES DEUX PAGES
+    # MISE À JOUR EXPLICITE DE LA PAGE COURANTE
     isolate({
-      if (global_config$page == 1) {
-        global_config$page1$produits <- produits_valides
-        global_config$page1$codes_produits <- codes_valides
-      } else {
-        global_config$page2$produits <- produits_valides
-        global_config$page2$codes_produits <- codes_valides
-      }
+      current_page_key <- paste0("page", global_config$page)
+      global_config[[current_page_key]]$produits <- produits_valides
+      global_config[[current_page_key]]$codes_produits <- codes_valides
       
       # Sauvegarder la configuration complète
-      saveRDS(list(
-        page1 = global_config$page1,
-        page2 = global_config$page2,
-        panelistes = global_config$panelistes
-      ), file = config_file)
+      save_global_config()
     })
     
     # RAFRAÎCHISSEMENT FORCÉ
@@ -731,385 +1398,12 @@ server <- function(input, output, session) {
     })
   })
   
-  # ========== GESTION DES PANÉLISTES ==========
-  
-  # Ajouter un panéliste
-  observeEvent(input$add_panelist_btn, {
-    new_name <- trimws(input$new_panelist_name)
-    if (new_name == "") {
-      showNotification("Veuillez saisir un nom de panéliste.", type = "warning")
-      return()
-    }
-    
-    if (new_name %in% global_config$panelistes) {
-      showNotification("Ce panéliste existe déjà.", type = "warning")
-      return()
-    }
-    
-    # Ajouter le panéliste
-    global_config$panelistes <- c(global_config$panelistes, new_name)
-    
-    # Sauvegarder immédiatement
-    saveRDS(list(
-      page1 = global_config$page1,
-      page2 = global_config$page2,
-      panelistes = global_config$panelistes
-    ), file = config_file)
-    
-    # Réinitialiser le champ
-    updateTextInput(session, "new_panelist_name", value = "")
-    
-    showNotification(paste("Panéliste", new_name, "ajouté avec succès !"), type = "message")
-  })
-  
-  # Supprimer un panéliste (observateur dynamique)
-  observe({
-    lapply(global_config$panelistes, function(panelist) {
-      btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
-      observeEvent(input[[btn_id]], {
-        # Stocker le panéliste à supprimer
-        global_config$panelist_to_delete <- panelist
-        
-        # Modal de confirmation
-        showModal(modalDialog(
-          title = tagList(icon("exclamation-triangle", style = "color: #dc3545;"), "Confirmer la suppression"),
-          div(
-            style = "text-align: center; padding: 20px;",
-            h5(paste("Êtes-vous sûr de vouloir supprimer le panéliste :")),
-            h4(style = "color: #dc3545; font-weight: bold;", panelist),
-            br(),
-            p("Cette action est irréversible.")
-          ),
-          footer = tagList(
-            actionButton("cancel_delete", "Annuler", class = "btn-secondary"),
-            actionButton("confirm_delete_panelist", "Supprimer", class = "btn-danger")
-          ),
-          size = "m",
-          easyClose = FALSE
-        ))
-      }, ignoreInit = TRUE)
-    })
-  })
-  
-  # Annuler la suppression
-  # Annuler la suppression
-  observeEvent(input$cancel_delete, {
-    global_config$panelist_to_delete <- NULL
-    removeModal()
-  })
-  
-  # Confirmer la suppression
-  observeEvent(input$confirm_delete_panelist, {
-    panelist_to_remove <- global_config$panelist_to_delete
-    
-    if (!is.null(panelist_to_remove)) {
-      # Supprimer le panéliste
-      global_config$panelistes <- setdiff(global_config$panelistes, panelist_to_remove)
-      
-      # Sauvegarder
-      saveRDS(list(
-        page1 = global_config$page1,
-        page2 = global_config$page2,
-        panelistes = global_config$panelistes
-      ), file = config_file)
-      
-      showNotification(paste("Panéliste", panelist_to_remove, "supprimé avec succès."), type = "message")
-      global_config$panelist_to_delete <- NULL
-    }
-    
-    removeModal()
-  })
-  
-  output$download_results <- downloadHandler(
-    filename = function() {
-      paste0("reponses_strength_", Sys.Date(), ".csv")
-    },
-    content = function(file) {
-      file.copy(output_file, file)
-    }
-  )  
-  
-  # Modal de connexion admin
-  observeEvent(input$show_login, {
-    showModal(modalDialog(
-      title = tagList(icon("lock"), "Connexion Administrateur"),
-      size = "s",
-      fluidRow(
-        column(12,
-               textInput("admin_user", "Utilisateur", placeholder = "admin"),
-               passwordInput("admin_pass", "Mot de passe", placeholder = "••••"),
-               br(),
-               div(style = "text-align: center;",
-                   actionButton("login_btn", "Se connecter", 
-                                class = "btn-primary",
-                                icon = icon("sign-in-alt"))
-               )
-        )
-      ),
-      footer = modalButton("Annuler")
-    ))
-  })
-  
-  observeEvent(input$login_btn, {
-    if (input$admin_user == "admin" && input$admin_pass == "1234") {
-      global_config$admin_logged <- TRUE
-      removeModal()
-      showNotification("Connexion réussie !", type = "message")
-    } else {
-      showNotification("Login ou mot de passe incorrect.", type = "error")
-    }
-  })
-  
-  # MÉCANISME DE RAFRAÎCHISSEMENT DE L'UI - Modal du panel admin avec onglets AMÉLIORÉE
-  observeEvent(input$show_admin_panel, {
-    # Forcer le rechargement des produits
-    load_temp_products_for_page(global_config$page)
-    
-    showModal(modalDialog(
-      title = tagList(icon("cogs"), "Configuration de l'étude"),
-      size = "l",
-      class = "admin-modal",
-      div(class = "admin-form",
-          # Navigation par onglets avec JavaScript
-          tags$ul(class = "nav nav-tabs", role = "tablist",
-                  tags$li(class = "nav-item",
-                          tags$a(class = "nav-link active", 
-                                 `data-toggle` = "tab", 
-                                 href = "#config-tab", 
-                                 role = "tab",
-                                 tagList(icon("cogs"), "Configuration"))),
-                  tags$li(class = "nav-item",
-                          tags$a(class = "nav-link", 
-                                 `data-toggle` = "tab", 
-                                 href = "#panelists-tab", 
-                                 role = "tab",
-                                 tagList(icon("users"), "Panélistes")))
-          ),
-          
-          # Contenu des onglets avec scroll séparé
-          div(class = "tab-content",
-              # Onglet Configuration
-              div(class = "tab-pane fade show active", 
-                  id = "config-tab", 
-                  role = "tabpanel",
-                  uiOutput("admin_config_content")
-              ),
-              
-              # Onglet Panélistes
-              div(class = "tab-pane fade", 
-                  id = "panelists-tab", 
-                  role = "tabpanel",
-                  uiOutput("admin_panelists_content")
-              )
-          )
-      ),
-      footer = tagList(
-        actionButton("close_admin", "Fermer", class = "btn-secondary")
-      )
-    ))
-    
-    # FORCER L'ACTIVATION DE L'ONGLET CONFIGURATION
-    runjs("
-      setTimeout(function() {
-        // Activer le premier onglet et son contenu
-        $('#config-tab').addClass('show active');
-        $('a[href=\"#config-tab\"]').addClass('active');
-        
-        // S'assurer que l'onglet panélistes est inactif
-        $('#panelists-tab').removeClass('show active');
-        $('a[href=\"#panelists-tab\"]').removeClass('active');
-        
-        // Forcer le rendu initial
-        if (typeof Shiny !== 'undefined' && Shiny.bindAll) {
-          Shiny.bindAll(document.getElementById('config-tab'));
-        }
-      }, 150);
-    ")
-  }, priority = 1000)
-  
-  observeEvent(input$close_admin, {
-    removeModal()
-  })
-  
-  output$adminLogged <- reactive({
-    global_config$admin_logged
-  })
-  outputOptions(output, "adminLogged", suspendWhenHidden = FALSE)
-  
-  # ========== CONTENU DE L'ONGLET PANÉLISTES AMÉLIORÉ ==========
-  output$admin_panelists_content <- renderUI({
-    req(global_config$admin_logged)
-    
-    panelist_items <- lapply(global_config$panelistes, function(panelist) {
-      btn_id <- paste0("remove_panelist_", gsub("[^A-Za-z0-9]", "_", panelist))
-      
-      div(class = "panelist-item",
-          span(class = "panelist-name", panelist),
-          div(class = "panelist-actions",
-              actionButton(btn_id, "", 
-                           icon = icon("trash"), 
-                           class = "btn-danger btn-sm",
-                           title = "Supprimer ce panéliste",
-                           onclick = "event.stopPropagation();")
-          )
-      )
-    })
-    
-    tagList(
-      # Section d'ajout EN HAUT
-      div(class = "add-panelist-section",
-          h4(tagList(icon("user-plus"), "Ajouter un nouveau panéliste")),
-          fluidRow(
-            column(8,
-                   textInput("new_panelist_name", 
-                             label = NULL,
-                             placeholder = "Nom du nouveau panéliste",
-                             value = "")
-            ),
-            column(4,
-                   actionButton("add_panelist_btn", 
-                                "Ajouter", 
-                                icon = icon("plus"),
-                                class = "btn-success",
-                                style = "width: 100%;")
-            )
-          ),
-          div(class = "alert alert-info",
-              style = "margin-top: 15px;",
-              tagList(icon("lightbulb"), 
-                      " Les panélistes ajoutés seront immédiatement disponibles dans les questionnaires."))
-      ),
-      
-      # Liste des panélistes existants
-      div(class = "config-section",
-          h4(tagList(icon("users"), "Panélistes actuels (", length(global_config$panelistes), ")")),
-          
-          if (length(global_config$panelistes) > 0) {
-            div(class = "panelists-container",
-                panelist_items
-            )
-          } else {
-            div(class = "alert alert-info",
-                tagList(icon("info-circle"), " Aucun panéliste configuré."))
-          }
-      )
-    )
-  })
-  
-  # ========== CONTENU DE L'ONGLET CONFIGURATION AVEC UI STABLE ==========
-  output$admin_config_content <- renderUI({
-    req(global_config$admin_logged)
-    
-    etapes_choices <- c("NEAT", "BLOOM", "WET", "DRY", "DRYER")
-    cfg <- if (global_config$page == 1) global_config$page1 else global_config$page2
-    
-    tagList(
-      # Sélection de page
-      div(class = "config-section",
-          h4(tagList(icon("file-alt"), "Sélection de la page")),
-          div(style = "text-align: center; margin-bottom: 20px;",
-              actionButton("setup_page1", "Configurer Page 1", 
-                           class = if(global_config$page == 1) "btn-primary" else "btn-outline-primary",
-                           style = "margin-right: 10px;"),
-              actionButton("setup_page2", "Configurer Page 2", 
-                           class = if(global_config$page == 2) "btn-primary" else "btn-outline-primary")
-          ),
-          h5(paste("Configuration actuelle : Page", global_config$page))
-      ),
-      
-      # Configuration des produits - CONTENEUR STABLE
-      div(class = "products-section",
-          div(class = "products-header",
-              h4(tagList(icon("boxes"), "Produits et codes")),
-              div(
-                actionButton("save_products", "Sauvegarder les produits", 
-                             icon = icon("save"), 
-                             class = "btn-warning"),
-                uiOutput("save_confirmation_ui")
-              )
-          ),
-          # CONTENEUR STATIQUE - Ne sera jamais re-rendu
-          div(id = "product_inputs_container",
-              class = "product-inputs-wrapper"
-          ),
-          div(style = "margin-top: 15px;",
-              actionButton("add_product", "Ajouter un produit", 
-                           icon = icon("plus"), class = "btn-primary btn-sm"),
-              uiOutput("unsaved_changes_indicator")
-          )
-      ),
-      
-      # Configuration de base
-      div(class = "config-section",
-          h4(tagList(icon("flask"), "Base de l'étude")),
-          selectizeInput("admin_base", NULL,
-                         choices = c("T05107", "T051M000G", "E025C004C", "Other"),
-                         selected = cfg$base,
-                         options = list(create = TRUE, placeholder = "Sélectionner ou saisir une base"))
-      ),
-      
-      # Configuration des étapes
-      div(class = "config-section",
-          h4(tagList(icon("list-ol"), "Étapes à évaluer")),
-          checkboxGroupInput("admin_etapes", NULL,
-                             choices = etapes_choices,
-                             selected = cfg$etapes,
-                             inline = TRUE)
-      ),
-      
-      # Configuration des supports
-      div(class = "config-section",
-          h4(tagList(icon("tools"), "Supports par étape")),
-          uiOutput("support_inputs")
-      ),
-      
-      # Boutons de sauvegarde GLOBALE
-      div(style = "text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;",
-          actionButton("save_config", "Sauvegarder la configuration complète", 
-                       class = "btn-success btn-lg",
-                       icon = icon("save"))
-      )
-    )
-  })
-  
-  # Enhanced UI feedback components
-  output$save_confirmation_ui <- renderUI({
-    if (global_config$show_save_confirmation) {
-      span(class = "save-confirmation show", 
-           style = "color: #28a745; font-weight: bold; margin-left: 10px;",
-           "✓ Sauvegardé !")
-    }
-  })
-  
-  output$unsaved_changes_indicator <- renderUI({
-    if (has_real_changes()) {
-      span(style = "color: #ffc107; margin-left: 15px; font-style: italic;",
-           icon("exclamation-triangle"), " Modifications non sauvegardées")
-    }
-  })
-  
-  output$support_inputs <- renderUI({
-    req(input$admin_etapes)
-    cfg <- if (global_config$page == 1) global_config$page1 else global_config$page2
-    
-    lapply(input$admin_etapes, function(etape) {
-      selected_supports <- if (!is.null(cfg$supports[[etape]])) cfg$supports[[etape]] else NULL
-      div(style = "margin-bottom: 15px;",
-          strong(paste("Supports pour", etape, ":")),
-          checkboxGroupInput(paste0("support_", etape), NULL,
-                             choices = c("TS", "TC", "PS", "None"),
-                             selected = selected_supports,
-                             inline = TRUE)
-      )
-    })
-  })
-  
   # SYNCHRONISATION RENFORCÉE - Fonction pour enregistrer la configuration
   enregistrer_config <- function(page_num) {
     req(input$admin_base, input$admin_etapes)
     
     # Utiliser les produits déjà sauvegardés
-    cfg <- if (page_num == 1) global_config$page1 else global_config$page2
+    cfg <- global_config[[paste0("page", page_num)]]
     
     supports_list <- list()
     for (etape in input$admin_etapes) {
@@ -1124,18 +1418,10 @@ server <- function(input, output, session) {
       supports = supports_list
     )
     
-    # Mise à jour explicite des deux pages
-    if (page_num == 1) {
-      global_config$page1 <- config
-    } else {
-      global_config$page2 <- config
-    }
+    # Mise à jour explicite de la page courante
+    global_config[[paste0("page", page_num)]] <- config
     
-    saveRDS(list(
-      page1 = global_config$page1,
-      page2 = global_config$page2,
-      panelistes = global_config$panelistes
-    ), file = config_file)
+    save_global_config()
   }
   
   observeEvent(input$save_config, {
@@ -1151,7 +1437,7 @@ server <- function(input, output, session) {
   })
   
   # GESTION DES ÉTATS VIDES - Fonction pour générer l'interface des questionnaires AVEC COMMENTAIRES
-  render_questionnaire_ui <- function(cfg) {
+  render_questionnaire_ui <- function(cfg, page_id) {
     # Gestion des états vides
     if (length(cfg$produits) == 0) {
       return(
@@ -1174,7 +1460,7 @@ server <- function(input, output, session) {
         if (!is.null(supports) && length(supports) > 0) {
           # Sliders pour les supports
           sliders <- lapply(supports, function(support) {
-            input_id <- paste0("strength_", produit, "_", etape, "_", support)
+            input_id <- paste0("strength_", page_id, "_", produit, "_", etape, "_", support)
             icone <- switch(etape,
                             "NEAT" = icon("flask"),
                             "BLOOM" = icon("fire"),
@@ -1190,7 +1476,7 @@ server <- function(input, output, session) {
           })
           
           # Commentaire pour l'étape
-          comment_id <- paste0("comment_", i, "_", etape)
+          comment_id <- paste0("comment_", page_id, "_", i, "_", etape)
           comment_input <- textAreaInput(
             comment_id,
             label = paste("Commentaire pour", etape),
@@ -1218,7 +1504,7 @@ server <- function(input, output, session) {
     
     tagList(
       div(class = "config-section",
-          selectInput(paste0("panelist_name_", cfg$page_id), 
+          selectInput(paste0("panelist_name_", page_id), 
                       tagList(icon("user"), "Votre nom :"), 
                       choices = c("Veuillez sélectionner" = "", global_config$panelistes), 
                       selected = ""),   
@@ -1228,113 +1514,267 @@ server <- function(input, output, session) {
           tagList(icon("info-circle"), " Merci d'évaluer la force pour chaque combinaison produit / support / étape et d'ajouter vos commentaires.")),
       produit_panels,
       div(style = "text-align: center; margin-top: 30px;",
-          actionButton(paste0("submit_", cfg$page_id), 
+          actionButton(paste0("submit_", page_id), 
                        label = tagList(icon("check"), "Soumettre les réponses"),
                        class = "btn-success btn-lg")
       )
     )
   }
   
-  # Génération des interfaces de questionnaire
-  output$questionnaire_ui1 <- renderUI({ 
-    if (!is.null(global_config$page1$produits) && length(global_config$page1$produits) > 0) {
-      render_questionnaire_ui(c(global_config$page1, list(page_id = 1)))
-    } else {
-      div(class = "alert alert-warning", 
-          style = "margin-top: 50px;",
-          tagList(icon("exclamation-triangle"), 
-                  " Configuration de la page 1 non définie. Veuillez configurer depuis le panel Admin."))
-    }
+  # Génération DYNAMIQUE des interfaces de questionnaire pour toutes les fiches actives (1-10)
+  observe({
+    active_sheets <- global_config$active_sheets
+    
+    lapply(active_sheets, function(sheet_num) {
+      output[[paste0("questionnaire_ui", sheet_num)]] <- renderUI({ 
+        cfg <- global_config[[paste0("page", sheet_num)]]
+        if (!is.null(cfg$produits) && length(cfg$produits) > 0) {
+          render_questionnaire_ui(cfg, sheet_num)
+        } else {
+          div(class = "alert alert-warning", 
+              style = "margin-top: 50px;",
+              tagList(icon("exclamation-triangle"), 
+                      paste(" La Page", sheet_num, "n'est pas encore configurée. Veuillez ajouter des produits via le panel Admin.")))
+        }
+      })
+    })
   })
   
-  output$questionnaire_ui2 <- renderUI({ 
-    if (!is.null(global_config$page2$produits) && length(global_config$page2$produits) > 0) {
-      render_questionnaire_ui(c(global_config$page2, list(page_id = 2)))
-    } else {
-      div(class = "alert alert-warning", 
-          style = "margin-top: 50px;",
-          tagList(icon("exclamation-triangle"), 
-                  " Configuration de la page 2 non définie. Veuillez configurer depuis le panel Admin."))
-    }
-  })
+  # ========== GESTION DES SOUMISSIONS POUR TOUTES LES PAGES (1-10) ==========
   
-  # Observateurs pour la soumission des réponses
-  observeEvent(input$submit_1, {
-    enregistrer_reponses(1)
-  })
-  
-  observeEvent(input$submit_2, {
-    enregistrer_reponses(2)
-  })
-  
-  # Fonction pour enregistrer les réponses AVEC COMMENTAIRES
-  enregistrer_reponses <- function(page_id) {
-    cfg <- if (page_id == 1) global_config$page1 else global_config$page2
-    panelist_name <- input[[paste0("panelist_name_", page_id)]]
+  # Fonction pour sauvegarder les réponses
+  save_responses <- function(cfg, page_id, panelist_name, responses, comments) {
+    timestamp <- Sys.time()
     
-    if (is.null(panelist_name) || panelist_name == "") {
-      showNotification("Veuillez sélectionner votre nom avant de valider.", type = "error")
-      return(NULL)
-    }
+    # Créer les données de réponse
+    response_data <- data.frame(
+      timestamp = timestamp,
+      page = page_id,
+      panelist = panelist_name,
+      base = cfg$base,
+      produit = character(0),
+      code_produit = character(0),
+      etape = character(0),
+      support = character(0),
+      strength = numeric(0),
+      commentaire = character(0),
+      stringsAsFactors = FALSE
+    )
     
-    # Vérification de duplication
-    if (file.exists(output_file)) {
-      previous <- read_csv(output_file, show_col_types = FALSE)
-      deja_repondu <- previous %>%
-        filter(paneliste == panelist_name, base == cfg$base, produit %in% cfg$produits)
-      if (nrow(deja_repondu) > 0) {
-        showNotification("Vous avez déjà répondu à ce test pour au moins un des produits.", type = "warning")
-        return(NULL)
-      }
-    }
-    
-    responses <- list()
-    
-    # Parcourir les produits avec leur index pour associer le bon code
+    # Parcourir tous les produits et étapes
     for (i in seq_along(cfg$produits)) {
       produit <- cfg$produits[i]
       code_produit <- if (length(cfg$codes_produits) >= i) cfg$codes_produits[i] else ""
       
       for (etape in cfg$etapes) {
         supports <- cfg$supports[[etape]]
-        commentaire <- input[[paste0("comment_", i, "_", etape)]] %||% ""
-        
         if (!is.null(supports) && length(supports) > 0) {
+          
+          # Récupérer le commentaire pour cette étape
+          comment_id <- paste0("comment_", page_id, "_", i, "_", etape)
+          comment_text <- comments[[comment_id]] %||% ""
+          
           for (support in supports) {
-            input_id <- paste0("strength_", produit, "_", etape, "_", support)
-            val <- input[[input_id]]
+            input_id <- paste0("strength_", page_id, "_", produit, "_", etape, "_", support)
+            strength_value <- responses[[input_id]] %||% 0
             
-            if (!is.null(val)) {
-              response <- list(
-                timestamp = Sys.time(),
-                paneliste = panelist_name,
-                code_produit = code_produit,
-                produit = produit,
-                base = cfg$base,
-                attribut = "Strength",
-                etape = etape,
-                support = support,
-                note = val,
-                commentaire = commentaire  # Nouvelle colonne
-              )
-              responses[[length(responses) + 1]] <- as.data.frame(response, stringsAsFactors = FALSE)
-            }
+            # Ajouter une ligne pour chaque combinaison
+            new_row <- data.frame(
+              timestamp = timestamp,
+              page = page_id,
+              panelist = panelist_name,
+              base = cfg$base,
+              produit = produit,
+              code_produit = code_produit,
+              etape = etape,
+              support = support,
+              strength = strength_value,
+              commentaire = comment_text,
+              stringsAsFactors = FALSE
+            )
+            
+            response_data <- rbind(response_data, new_row)
           }
         }
       }
     }
     
-    if (length(responses) > 0) {
-      response_df <- do.call(rbind, responses)
-      if (!file.exists(output_file)) {
-        write_csv(response_df, output_file)
-      } else {
-        write_csv(response_df, output_file, append = TRUE)
-      }
-      showNotification("Merci ! Vos réponses ont été enregistrées avec succès.", type = "message", duration = 5)
+    # Sauvegarder dans le fichier CSV
+    if (file.exists(output_file)) {
+      existing_data <- read_csv(output_file, show_col_types = FALSE)
+      combined_data <- rbind(existing_data, response_data)
+    } else {
+      combined_data <- response_data
     }
+    
+    write_csv(combined_data, output_file)
+    
+    return(nrow(response_data))
   }
-}
+  
+  # Créer dynamiquement les observateurs de soumission pour toutes les fiches actives
+  observe({
+    active_sheets <- global_config$active_sheets
+    
+    lapply(active_sheets, function(sheet_num) {
+      local({
+        current_sheet <- sheet_num
+        
+        observeEvent(input[[paste0("submit_", current_sheet)]], {
+          cfg <- global_config[[paste0("page", current_sheet)]]
+          panelist_name <- input[[paste0("panelist_name_", current_sheet)]]
+          
+          # Validation
+          if (is.null(panelist_name) || panelist_name == "") {
+            showNotification("Veuillez sélectionner votre nom avant de soumettre.", type = "error")
+            return()
+          }
+          
+          if (length(cfg$produits) == 0) {
+            showNotification("Aucun produit configuré pour cette page.", type = "error")
+            return()
+          }
+          
+          # Collecter toutes les réponses et commentaires
+          all_inputs <- reactiveValuesToList(input)
+          
+          # Filtrer les réponses de force pour cette page
+          strength_pattern <- paste0("^strength_", current_sheet, "_")
+          strength_responses <- all_inputs[grepl(strength_pattern, names(all_inputs))]
+          
+          # Filtrer les commentaires pour cette page
+          comment_pattern <- paste0("^comment_", current_sheet, "_")
+          comment_responses <- all_inputs[grepl(comment_pattern, names(all_inputs))]
+          
+          # Vérifier qu'il y a au moins quelques réponses
+          if (length(strength_responses) == 0) {
+            showNotification("Aucune évaluation détectée. Veuillez vérifier la configuration.", type = "error")
+            return()
+          }
+          
+          # Sauvegarder les réponses
+          tryCatch({
+            nb_responses <- save_responses(cfg, current_sheet, panelist_name, strength_responses, comment_responses)
+            
+            showNotification(
+              paste("Réponses sauvegardées avec succès ! (", nb_responses, "évaluations enregistrées pour la Page", current_sheet, ")"), 
+              type = "message", 
+              duration = 5
+            )
+            
+            # Réinitialiser les champs (optionnel)
+            # updateSelectInput(session, paste0("panelist_name_", current_sheet), selected = "")
+            
+          }, error = function(e) {
+            showNotification(paste("Erreur lors de la sauvegarde :", e$message), type = "error")
+          })
+        })
+      })
+    })
+  })
+  
+  # ========== FONCTIONS UTILITAIRES SUPPLÉMENTAIRES ==========
+  
+  # Fonction pour valider la configuration d'une page
+  validate_page_config <- function(cfg) {
+    errors <- character(0)
+    
+    if (length(cfg$produits) == 0) {
+      errors <- c(errors, "Aucun produit configuré")
+    }
+    
+    if (is.null(cfg$base) || cfg$base == "") {
+      errors <- c(errors, "Base non définie")
+    }
+    
+    if (is.null(cfg$etapes) || length(cfg$etapes) == 0) {
+      errors <- c(errors, "Aucune étape sélectionnée")
+    }
+    
+    if (!is.null(cfg$etapes)) {
+      for (etape in cfg$etapes) {
+        if (is.null(cfg$supports[[etape]]) || length(cfg$supports[[etape]]) == 0) {
+          errors <- c(errors, paste("Aucun support défini pour l'étape", etape))
+        }
+      }
+    }
+    
+    return(errors)
+  }
+  
+  # Observer pour afficher les erreurs de configuration
+  observe({
+    active_sheets <- global_config$active_sheets
+    
+    lapply(active_sheets, function(sheet_num) {
+      cfg <- global_config[[paste0("page", sheet_num)]]
+      errors <- validate_page_config(cfg)
+      
+      if (length(errors) > 0) {
+        # Vous pouvez ajouter ici une logique pour afficher les erreurs
+        # Par exemple, dans les logs ou dans l'interface
+      }
+    })
+  })
+  
+  # ========== NETTOYAGE ET OPTIMISATIONS ==========
+  
+  # Fonction de nettoyage lors de la fermeture de session
+  session$onSessionEnded(function() {
+    # Sauvegarder une dernière fois si nécessaire
+    if (global_config$initialized && !global_config$products_saved) {
+      save_global_config()
+    }
+  })
+  
+  # Observer pour la gestion de la mémoire
+  observe({
+    # Nettoyer les observateurs non utilisés si nécessaire
+    # (Shiny le fait automatiquement, mais on peut ajouter du nettoyage personnalisé ici)
+  })
+  
+  # ========== FONCTIONNALITÉS AVANCÉES ==========
+  
+  # Fonction pour exporter la configuration
+  output$export_config <- downloadHandler(
+    filename = function() {
+      paste0("config_strength_", Sys.Date(), ".rds")
+    },
+    content = function(file) {
+      file.copy(config_file, file)
+    }
+  )
+  
+  # Fonction pour importer une configuration (si nécessaire)
+  observeEvent(input$import_config, {
+    # Logique d'importation de configuration
+    # À implémenter selon les besoins
+  })
+  
+  # ========== MONITORING ET DEBUGGING ==========
+  
+  # Observer pour le debugging (peut être supprimé en production)
+  observe({
+    if (getOption("shiny.debug", FALSE)) {
+      cat("Active sheets:", paste(global_config$active_sheets, collapse = ", "), "\n")
+      cat("Current page:", global_config$page, "\n")
+      cat("Products saved:", global_config$products_saved, "\n")
+    }
+  })
+  
+  # ========== FINALISATION ==========
+  
+  # Message de démarrage
+  observe({
+    if (global_config$initialized) {
+      cat("Application Strength MP initialisée avec", length(global_config$active_sheets), "fiches actives\n")
+    }
+  })
+  
+} # Fin du serveur
 
-# Lancement de l'application
-shinyApp(ui, server)
+# ========== LANCEMENT DE L'APPLICATION ==========
+
+# Démarrer l'application Shiny
+shinyApp(ui = ui, server = server)
+

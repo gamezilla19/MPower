@@ -289,7 +289,55 @@ ui <- fluidPage(
         visibility: visible !important;
       }
 
-
+      /* STYLES POUR L'ÉDITION DES NOMS DE PAGES */
+      .page-name-editor {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      
+      .page-name-input {
+        flex: 1;
+        padding: 6px 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      
+      .page-name-input:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        outline: none;
+      }
+      
+      .edit-name-btn, .save-name-btn, .cancel-name-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+        border-radius: 3px;
+        border: none;
+        cursor: pointer;
+      }
+      
+      .edit-name-btn {
+        background: #6c757d;
+        color: white;
+      }
+      
+      .save-name-btn {
+        background: #28a745;
+        color: white;
+      }
+      
+      .cancel-name-btn {
+        background: #dc3545;
+        color: white;
+      }
+      
+      .sheet-name-display {
+        font-weight: 600;
+        color: #495057;
+      }
       
       .tab-pane:not(.active) {
         height: 0;
@@ -297,6 +345,24 @@ ui <- fluidPage(
         opacity: 0;
         visibility: hidden;
         padding: 0;
+      }
+      
+      .page-name-input-wrapper {
+        flex: 1;
+      }
+      
+      .page-name-input-wrapper input {
+        width: 100%;
+        padding: 6px 10px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      
+      .page-name-input-wrapper input:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+        outline: none;
       }
       
       /* SCROLL PERSONNALISÉ */
@@ -488,7 +554,15 @@ server <- function(input, output, session) {
   
   # CONFIGURATION ÉTENDUE POUR 10 PAGES MAXIMUM
   init_page_config <- function() {
-    list(produits = character(0), codes_produits = character(0), base = NULL, etapes = NULL, supports = list())
+    list(
+      produits = character(0), 
+      codes_produits = character(0), 
+      base = NULL, 
+      etapes = NULL, 
+      supports = list(),
+      # NOUVEAU : nom personnalisé de la page
+      page_name = NULL
+    )
   }
   
   # Reactive values pour stocker la configuration de l'etude (ÉTENDU À 10 PAGES)
@@ -511,6 +585,10 @@ server <- function(input, output, session) {
     # NOUVEAU : Gestion des fiches actives (par défaut 1 et 2)
     active_sheets = c(1, 2),
     # Valeurs temporaires pour l'édition des produits
+    page_names = c(
+      "Page 1", "Page 2", "Page 3", "Page 4", "Page 5",
+      "Page 6", "Page 7", "Page 8", "Page 9", "Page 10"
+    ),
     temp_products = list(),
     temp_codes = list(),
     # État de sauvegarde
@@ -574,7 +652,8 @@ server <- function(input, output, session) {
   save_global_config <- function() {
     config_to_save <- list(
       panelistes = global_config$panelistes,
-      active_sheets = global_config$active_sheets
+      active_sheets = global_config$active_sheets,
+      page_names = global_config$page_names
     )
     
     # Sauvegarder toutes les pages (1 à 10)
@@ -595,10 +674,11 @@ server <- function(input, output, session) {
                  "Aucune fiche active. Veuillez configurer les fiches depuis le panel Admin."))
     }
     
-    # Créer les onglets dynamiquement
+    # Créer les onglets dynamiquement avec noms personnalisés
     tab_panels <- lapply(active_sheets, function(sheet_num) {
+      page_name <- global_config$page_names[sheet_num]
       tabPanel(
-        paste("Page", sheet_num),
+        page_name,  # Utiliser le nom personnalisé
         icon = icon("clipboard-list"),
         br(),
         uiOutput(paste0("questionnaire_ui", sheet_num))
@@ -646,6 +726,11 @@ server <- function(input, output, session) {
         
         # Charger les fiches actives ou utiliser les valeurs par défaut
         global_config$active_sheets <- conf$active_sheets %||% c(1, 2)
+        
+        global_config$page_names <- conf$page_names %||% c(
+          "Page 1", "Page 2", "Page 3", "Page 4", "Page 5",
+          "Page 6", "Page 7", "Page 8", "Page 9", "Page 10"
+        )
       }
       
       # Initialisation explicite des IDs pour la page courante
@@ -904,6 +989,102 @@ server <- function(input, output, session) {
     removeModal()
   })
   
+  # ========== GESTION DE L'ÉDITION DES NOMS DE PAGES ==========
+  
+  # Observateurs pour l'édition des noms (pour toutes les pages)
+  observe({
+    for (sheet_num in 1:10) {
+      local({
+        current_sheet <- sheet_num
+        
+        # Observateur pour commencer l'édition
+        observeEvent(input[[paste0("edit_name_", current_sheet)]], {
+          current_name <- global_config$page_names[current_sheet]
+          
+          # Remplacer l'affichage par un champ d'édition
+          removeUI(selector = paste0("#name_display_", current_sheet))
+          
+          insertUI(
+            selector = paste0("#edit_name_", current_sheet),
+            where = "beforeBegin",
+            ui = tagList(
+              div(class = "page-name-input-wrapper",
+                  textInput(paste0("name_input_", current_sheet), 
+                            label = NULL,
+                            value = current_name,
+                            placeholder = "Nom de la page")),
+              actionButton(paste0("save_name_", current_sheet), "", 
+                           icon = icon("check"), 
+                           class = "save-name-btn",
+                           title = "Sauvegarder"),
+              actionButton(paste0("cancel_name_", current_sheet), "", 
+                           icon = icon("times"), 
+                           class = "cancel-name-btn",
+                           title = "Annuler")
+            )
+          )
+          
+          # Cacher le bouton d'édition
+          shinyjs::hide(paste0("edit_name_", current_sheet))
+          
+          # Focus sur le champ
+          runjs(paste0("document.getElementById('name_input_", current_sheet, "').focus();"))
+        })
+        
+        # Observateur pour sauvegarder le nom
+        observeEvent(input[[paste0("save_name_", current_sheet)]], {
+          new_name <- trimws(input[[paste0("name_input_", current_sheet)]])
+          
+          if (new_name == "") {
+            showNotification("Le nom ne peut pas être vide !", type = "warning")
+            return()
+          }
+          
+          if (nchar(new_name) > 50) {
+            showNotification("Le nom ne peut pas dépasser 50 caractères !", type = "warning")
+            return()
+          }
+          
+          # Mettre à jour le nom
+          global_config$page_names[current_sheet] <- new_name
+          
+          # Sauvegarder
+          save_global_config()
+          
+          # Restaurer l'affichage normal
+          restore_name_display(current_sheet, new_name)
+          
+          showNotification(paste("Nom de la fiche", current_sheet, "mis à jour !"), type = "message")
+        })
+        
+        # Observateur pour annuler l'édition
+        observeEvent(input[[paste0("cancel_name_", current_sheet)]], {
+          current_name <- global_config$page_names[current_sheet]
+          restore_name_display(current_sheet, current_name)
+        })
+      })
+    }
+  })
+  
+  
+  # Fonction helper pour restaurer l'affichage normal
+  restore_name_display <- function(sheet_num, name) {
+    # Supprimer les éléments d'édition
+    removeUI(selector = paste0("#name_input_", sheet_num))
+    removeUI(selector = paste0("#save_name_", sheet_num))
+    removeUI(selector = paste0("#cancel_name_", sheet_num))
+    
+    # Restaurer l'affichage du nom
+    insertUI(
+      selector = paste0("#edit_name_", sheet_num),
+      where = "beforeBegin",
+      ui = span(class = "sheet-name-display", id = paste0("name_display_", sheet_num), name)
+    )
+    
+    # Réafficher le bouton d'édition
+    shinyjs::show(paste0("edit_name_", sheet_num))
+  }
+  
   output$download_results <- downloadHandler(
     filename = function() {
       paste0("reponses_strength_", Sys.Date(), ".csv")
@@ -1033,7 +1214,7 @@ server <- function(input, output, session) {
   })
   outputOptions(output, "adminLogged", suspendWhenHidden = FALSE)
   
-  # ========== ONGLET : GESTION DES FICHES (ÉTENDU À 10 PAGES) ==========
+  # ========== ONGLET : GESTION DES FICHES AVEC NOMS PERSONNALISÉS ==========
   output$admin_sheets_content <- renderUI({
     req(global_config$admin_logged)
     
@@ -1043,19 +1224,36 @@ server <- function(input, output, session) {
     sheet_elements <- lapply(1:10, function(sheet_num) {
       is_active <- sheet_num %in% active_sheets
       cfg <- global_config[[paste0("page", sheet_num)]]
+      page_name <- global_config$page_names[sheet_num]
       
       # Compter les produits configurés
       nb_products <- length(cfg$produits %||% character(0))
       
       div(class = "sheet-status",
-          div(class = "sheet-indicator",
-              h6(paste("Page", sheet_num)),
-              span(class = paste("sheet-badge", if(is_active) "sheet-active" else "sheet-inactive"),
-                   if(is_active) "ACTIVE" else "INACTIVE"),
-              if(is_active && nb_products > 0) {
-                span(style = "color: #6c757d; font-size: 11px; margin-left: 8px;",
-                     paste("(", nb_products, "produit(s))"))
-              }
+          div(class = "sheet-indicator", style = "flex-direction: column; align-items: flex-start;",
+              # Affichage/édition du nom
+              div(class = "page-name-editor",
+                  if(is_active) {
+                    tagList(
+                      span(class = "sheet-name-display", id = paste0("name_display_", sheet_num), page_name),
+                      actionButton(paste0("edit_name_", sheet_num), "", 
+                                   icon = icon("edit"), 
+                                   class = "edit-name-btn",
+                                   title = "Modifier le nom")
+                    )
+                  } else {
+                    span(class = "sheet-name-display", page_name)
+                  }
+              ),
+              # Indicateurs de statut
+              div(style = "display: flex; align-items: center; gap: 10px; margin-top: 5px;",
+                  span(class = paste("sheet-badge", if(is_active) "sheet-active" else "sheet-inactive"),
+                       if(is_active) "ACTIVE" else "INACTIVE"),
+                  if(is_active && nb_products > 0) {
+                    span(style = "color: #6c757d; font-size: 11px;",
+                         paste("(", nb_products, "produit(s))"))
+                  }
+              )
           ),
           div(class = "sheet-actions",
               if(!is_active) {
@@ -1074,14 +1272,15 @@ server <- function(input, output, session) {
       )
     })
     
-    # Aperçu des fiches actives
+    # Aperçu des fiches actives avec noms personnalisés
     preview_elements <- if(length(active_sheets) > 0) {
       lapply(active_sheets, function(sheet_num) {
         cfg <- global_config[[paste0("page", sheet_num)]]
         products <- cfg$produits %||% character(0)
+        page_name <- global_config$page_names[sheet_num]
         
         div(class = "preview-item",
-            strong(paste("Page", sheet_num, ":")),
+            strong(paste(page_name, ":")),
             span(if(length(products) > 0) {
               if(length(products) <= 3) {
                 paste(products, collapse = ", ")
@@ -1100,7 +1299,7 @@ server <- function(input, output, session) {
     tagList(
       div(class = "sheet-management",
           h4(tagList(icon("file-alt"), "Gestion des fiches de test (1-10)")),
-          p("Activez ou désactivez les fiches de test selon vos besoins. Chaque fiche peut contenir ses propres produits et configurations."),
+          p("Activez ou désactivez les fiches de test selon vos besoins. Cliquez sur l'icône d'édition pour personnaliser le nom d'une fiche active."),
           
           # Grille des fiches avec layout amélioré
           div(class = "sheet-grid", sheet_elements),
@@ -1115,12 +1314,13 @@ server <- function(input, output, session) {
                 icon("info-circle"),
                 " ",
                 strong("Note :"), 
-                " Les fiches désactivées conservent leur configuration mais ne sont pas visibles aux panélistes. Vous devez avoir au moins une fiche active. Maximum 10 fiches supportées."
+                " Les fiches désactivées conservent leur configuration mais ne sont pas visibles aux panélistes. Vous pouvez personnaliser le nom des fiches actives."
               )
           )
       )
     )
   })
+  
   
   # ========== CONTENU DE L'ONGLET PANÉLISTES ==========
   output$admin_panelists_content <- renderUI({
@@ -1192,8 +1392,9 @@ server <- function(input, output, session) {
     
     # Boutons pour changer de page (seulement les fiches actives)
     page_buttons <- lapply(active_sheets, function(sheet_num) {
+      page_name <- global_config$page_names[sheet_num]
       actionButton(paste0("setup_page", sheet_num), 
-                   paste("Page", sheet_num), 
+                   page_name,  # Utiliser le nom personnalisé
                    class = paste("page-button", if(global_config$page == sheet_num) "btn-primary" else "btn-outline-primary"))
     })
     
@@ -1719,12 +1920,17 @@ server <- function(input, output, session) {
   
   # ========== NETTOYAGE ET OPTIMISATIONS ==========
   
+  
   # Fonction de nettoyage lors de la fermeture de session
   session$onSessionEnded(function() {
     # Sauvegarder une dernière fois si nécessaire
-    if (global_config$initialized && !global_config$products_saved) {
-      save_global_config()
-    }
+    tryCatch({
+      if (isolate(global_config$initialized) && !isolate(global_config$products_saved)) {
+        save_global_config()
+      }
+    }, error = function(e) {
+      # Ignorer les erreurs lors de la fermeture
+    })
   })
   
   # Observer pour la gestion de la mémoire

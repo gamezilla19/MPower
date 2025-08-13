@@ -603,6 +603,9 @@ server <- function(input, output, session) {
     # Nouvel état pour contrôler les mises à jour
     ui_updating = FALSE
   )
+  # Dans la fonction server
+  submitted <- reactiveVal(list()) # Tracks user/sheet submissions
+  
   
   # Reactive values for dynamic product inputs
   product_ids <- reactiveVal(integer(0))
@@ -1749,24 +1752,13 @@ server <- function(input, output, session) {
   
   # ========== GESTION DES SOUMISSIONS POUR TOUTES LES PAGES (1-10) ==========
   
-  # Fonction pour sauvegarder les réponses
+  # Fonction pour sauvegarder les réponses - CORRIGÉE
   save_responses <- function(cfg, page_id, panelist_name, responses, comments) {
     timestamp <- Sys.time()
     
-    # Créer les données de réponse
-    response_data <- data.frame(
-      timestamp = timestamp,
-      page = page_id,
-      panelist = panelist_name,
-      base = cfg$base,
-      produit = character(0),
-      code_produit = character(0),
-      etape = character(0),
-      support = character(0),
-      strength = numeric(0),
-      commentaire = character(0),
-      stringsAsFactors = FALSE
-    )
+    # Initialiser une liste pour collecter toutes les lignes
+    all_rows <- list()
+    row_count <- 0
     
     # Parcourir tous les produits et étapes
     for (i in seq_along(cfg$produits)) {
@@ -1785,8 +1777,11 @@ server <- function(input, output, session) {
             input_id <- paste0("strength_", page_id, "_", produit, "_", etape, "_", support)
             strength_value <- responses[[input_id]] %||% 0
             
+            # Incrémenter le compteur
+            row_count <- row_count + 1
+            
             # Ajouter une ligne pour chaque combinaison
-            new_row <- data.frame(
+            all_rows[[row_count]] <- data.frame(
               timestamp = timestamp,
               page = page_id,
               panelist = panelist_name,
@@ -1795,16 +1790,22 @@ server <- function(input, output, session) {
               code_produit = code_produit,
               etape = etape,
               support = support,
-              strength = strength_value,
-              commentaire = comment_text,
+              strength = as.numeric(strength_value),
+              commentaire = as.character(comment_text),
               stringsAsFactors = FALSE
             )
-            
-            response_data <- rbind(response_data, new_row)
           }
         }
       }
     }
+    
+    # Vérifier qu'on a des données
+    if (length(all_rows) == 0) {
+      stop("Aucune donnée à sauvegarder")
+    }
+    
+    # Combiner toutes les lignes
+    response_data <- do.call(rbind, all_rows)
     
     # Sauvegarder dans le fichier CSV
     if (file.exists(output_file)) {
@@ -1818,6 +1819,7 @@ server <- function(input, output, session) {
     
     return(nrow(response_data))
   }
+  
   
   # Créer dynamiquement les observateurs de soumission pour toutes les fiches actives
   observe({
@@ -1834,6 +1836,14 @@ server <- function(input, output, session) {
           # Validation
           if (is.null(panelist_name) || panelist_name == "") {
             showNotification("Veuillez sélectionner votre nom avant de soumettre.", type = "error")
+            return()
+          }
+          
+          # Check existing submission - NOUVEAU
+          panel_key <- paste(panelist_name, current_sheet, sep = "_")
+          if (panel_key %in% names(submitted())) {
+            showNotification("Vous avez déjà soumis cette fiche. Une seule soumission autorisée.", 
+                             type = "error", duration = 5)
             return()
           }
           
@@ -1863,14 +1873,16 @@ server <- function(input, output, session) {
           tryCatch({
             nb_responses <- save_responses(cfg, current_sheet, panelist_name, strength_responses, comment_responses)
             
+            # Update submission tracker - NOUVEAU
+            current_submissions <- submitted()
+            current_submissions[[panel_key]] <- TRUE
+            submitted(current_submissions)
+            
             showNotification(
               paste("Réponses sauvegardées avec succès ! (", nb_responses, "évaluations enregistrées pour la Page", current_sheet, ")"), 
               type = "message", 
               duration = 5
             )
-            
-            # Réinitialiser les champs (optionnel)
-            # updateSelectInput(session, paste0("panelist_name_", current_sheet), selected = "")
             
           }, error = function(e) {
             showNotification(paste("Erreur lors de la sauvegarde :", e$message), type = "error")
@@ -1879,6 +1891,7 @@ server <- function(input, output, session) {
       })
     })
   })
+  
   
   # ========== FONCTIONS UTILITAIRES SUPPLÉMENTAIRES ==========
   

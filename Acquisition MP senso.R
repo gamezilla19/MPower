@@ -288,6 +288,12 @@ ui <- fluidPage(
         opacity: 1 !important;
         visibility: visible !important;
       }
+      
+      /* LIMITATION DE HAUTEUR SEULEMENT POUR LE MODAL ADMIN */
+      .admin-modal .tab-pane {
+        max-height: 70vh;
+      }
+
 
       /* STYLES POUR L'ÉDITION DES NOMS DE PAGES */
       .page-name-editor {
@@ -1983,4 +1989,3 @@ server <- function(input, output, session) {
 
 # Démarrer l'application Shiny
 shinyApp(ui = ui, server = server)
-
